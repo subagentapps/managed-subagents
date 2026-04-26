@@ -74,7 +74,10 @@ function normalizeTask(raw: RawTaskTomlEntry, idx: number): Task {
     );
   }
 
-  if (disposition !== "local" && !raw.repo) {
+  // 'auto' is intentionally allowed without repo here — classify() may
+  // pick 'local' which doesn't need repo. Strict repo-required check
+  // happens at dispatch time (M3+) once the disposition is concrete.
+  if (disposition !== "local" && disposition !== "auto" && !raw.repo) {
     throw new TaskParseError(
       `task[${idx}] (id=${raw.id}): non-local disposition '${disposition}' requires 'repo' (e.g. "owner/name")`,
       raw,

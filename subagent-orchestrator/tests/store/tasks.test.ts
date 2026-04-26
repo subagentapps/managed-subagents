@@ -53,6 +53,13 @@ disposition = "local"
     expect(() => parseTasksToml(toml)).toThrow(/requires 'repo'/);
   });
 
+  it("allows 'auto' disposition without repo (classifier picks at dispatch time)", () => {
+    const toml = `[[task]]\nid="t"\ntitle="x"\nprompt="y"\n`;
+    const tasks = parseTasksToml(toml);
+    expect(tasks[0]?.disposition).toBe("auto");
+    expect(tasks[0]?.repo).toBe("");
+  });
+
   it("rejects unknown disposition", () => {
     const toml = `[[task]]\nid="t"\ntitle="x"\nprompt="y"\ndisposition="bogus"\nrepo="o/r"\n`;
     expect(() => parseTasksToml(toml)).toThrow(/disposition 'bogus' invalid/);
