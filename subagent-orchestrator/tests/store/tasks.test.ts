@@ -61,11 +61,13 @@ disposition = "local"
   it("normalizes deep_review snake_case to deepReview camelCase", () => {
     const toml = `
 [[task]]
-id="t"; title="x"; prompt="y"
-disposition="claude-mention"
-repo="o/r"
-deep_review=true
-depends_on=["a","b"]
+id = "t"
+title = "x"
+prompt = "y"
+disposition = "claude-mention"
+repo = "o/r"
+deep_review = true
+depends_on = ["a", "b"]
 `;
     const tasks = parseTasksToml(toml);
     expect(tasks[0]?.deepReview).toBe(true);
