@@ -1,0 +1,119 @@
+# connectors.toml — source of truth for ~~category → MCP server resolution.
+#
+# Read by `subagent-orchestrator/src/cowork-bridge.ts` (M3+) and
+# referenced from every `subagent-cowork/<plugin>.md` migration strategy.
+#
+# Precedence (highest first): plugin-override > runtime-override > default
+# > unconfigured fallback.
+#
+# This file is template only as of 2026-04-26 — values reflect "what's
+# typically chosen" but no orchestrator code consumes them yet. Update
+# the [default] block to match what you actually have configured in
+# ~/.claude/settings.json.
+#
+# Spec: see subagent-cowork/cli-cowork-bridge.md §2.
+
+# ----------------------------------------------------------------------
+# Default mappings per category. Used when no per-task override is set.
+# ----------------------------------------------------------------------
+[default]
+"~~chat"                       = "slack"
+"~~email"                      = "microsoft-365"
+"~~calendar"                   = "google-calendar"
+"~~project tracker"            = "linear"
+"~~knowledge base"             = "notion"
+"~~design"                     = "figma"
+"~~design tool"                = "figma"
+"~~CRM"                        = "hubspot"
+"~~product analytics"          = "amplitude"
+"~~source control"             = "github"
+"~~monitoring"                 = "datadog"
+"~~incident management"        = "pagerduty"
+"~~data warehouse"             = "bigquery"
+"~~support platform"           = "intercom"
+"~~user feedback"              = "intercom"
+"~~conversation intelligence"  = "fireflies"
+"~~meeting transcription"      = "fireflies"
+"~~marketing automation"       = "hubspot"
+"~~marketing analytics"        = "supermetrics"
+"~~SEO"                        = "ahrefs"
+"~~ITSM"                       = "servicenow"
+"~~e-signature"                = "docusign"
+"~~office suite"               = "microsoft-365"
+"~~cloud storage"              = "box"
+"~~competitive intelligence"   = "similarweb"
+"~~sales engagement"           = "outreach"
+"~~data enrichment"            = "apollo"
+"~~notebook"                   = "hex"
+"~~literature"                 = "pubmed"
+"~~clinical trials"            = "clinical-trials-gov"
+"~~chemical database"          = "chembl"
+"~~drug targets"               = "open-targets"
+"~~data repository"            = "synapse"
+"~~journal access"             = "wiley-scholar-gateway"
+"~~AI research"                = "owkin"
+"~~scientific illustration"    = "biorender"
+"~~email marketing"            = "klaviyo"
+
+# ----------------------------------------------------------------------
+# Per-runtime overrides. Useful when CLI / Cowork / web each prefer a
+# different MCP server (or when a default isn't reachable from the
+# claude-code-on-the-web allowlist).
+# ----------------------------------------------------------------------
+# [runtime.cli."~~project tracker"]
+# server = "linear"
+# config_ref = "user.mcpServers.linear"
+#
+# [runtime.web."~~project tracker"]
+# server = "linear"
+# note = "Linear's hosted MCP rides *.modelcontextprotocol.io which is allowlisted"
+
+# ----------------------------------------------------------------------
+# Per-plugin overrides. e.g. legal needs a more formal channel than the
+# default Slack workspace.
+# ----------------------------------------------------------------------
+# [plugin.legal."~~chat"]
+# server = "slack"
+# channel = "#legal-counsel-only"
+
+# ----------------------------------------------------------------------
+# Categories with no MCP server today — bridge falls back to "paste
+# manually" for these. See subagent-cowork/<plugin>.md for which
+# plugins surface each gap.
+# ----------------------------------------------------------------------
+[unconfigured."~~CLM"]
+fallback = "paste-contract-text"
+plugins  = ["legal"]
+
+[unconfigured."~~ATS"]
+fallback = "paste-candidate-json"
+plugins  = ["human-resources"]
+
+[unconfigured."~~HRIS"]
+fallback = "paste-employee-csv"
+plugins  = ["human-resources"]
+
+[unconfigured."~~ERP"]
+fallback = "paste-csv"
+plugins  = ["finance"]
+
+[unconfigured."~~analytics"]
+fallback = "paste-csv-or-export-from-bi-tool"
+plugins  = ["finance"]
+
+[unconfigured."~~CI/CD"]
+fallback = "use-source-control-actions"
+plugins  = ["engineering"]
+
+[unconfigured."~~procurement"]
+fallback = "manual"
+plugins  = ["operations"]
+
+[unconfigured."~~lab platform"]
+fallback = "manual"
+plugins  = ["bio-research"]
+note     = "Benchling MCP placeholder upstream — wire when published"
+
+[unconfigured."~~compensation data"]
+fallback = "paste-levels-export"
+plugins  = ["human-resources"]
