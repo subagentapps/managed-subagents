@@ -1,0 +1,19 @@
+# macOS Finder cruft
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Backups
+*.bak
+*.bak.*
