@@ -6,6 +6,7 @@
 
 import { Command } from "commander";
 
+import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksList } from "./cli/tasks-list.js";
 
 const program = new Command();
@@ -23,6 +24,14 @@ tasks
   .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
   .action((opts: { file?: string }) => {
     runTasksList({ tasksTomlPath: opts.file });
+  });
+
+tasks
+  .command("classify")
+  .description("Run classify() on every task and print disposition + confidence")
+  .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
+  .action((opts: { file?: string }) => {
+    runTasksClassify({ tasksTomlPath: opts.file });
   });
 
 program.parse(process.argv);
