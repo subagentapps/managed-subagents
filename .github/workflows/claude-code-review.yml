@@ -3,12 +3,24 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    # Skip auto-review on PRs that ONLY touch the paths below.
+    # Lockfiles, snapshot images, and pure-text-doc dirs aren't worth
+    # ~$1 of Opus per review. If a PR touches *any* file outside these
+    # paths, the review still runs.
+    paths-ignore:
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/yarn.lock"
+      - "**/*.png"
+      - "**/*.jpg"
+      - "**/*.jpeg"
+      - "**/*.gif"
+      - "**/*.svg"
+      - "**/*.ico"
+      - ".github/CODEOWNERS"
+      - ".github/dependabot.yml"
+      - "**/CHANGELOG.md"
+      - "subagent-commands/whats-new/**/*.png"
 
 jobs:
   claude-review:
