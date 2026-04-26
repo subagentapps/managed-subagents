@@ -1,0 +1,36 @@
+# subagent-orchestrator tasks.toml
+#
+# v0.1 input source. Each [[task]] entry is one unit of work for the
+# orchestrator to dispatch. The orchestrator reads this file on startup
+# and processes tasks in declaration order, respecting per-task
+# `depends_on` if set.
+#
+# Schema (see ../PROJECT_PLAN.md §3 milestone M1):
+#
+# [[task]]
+# id              = "<short kebab-case id>"            # required
+# title           = "<one-line task title>"            # required
+# prompt          = "<self-contained prompt body>"    # required
+# disposition     = "auto"                              # auto | local | ultraplan | autofix | web | claude-mention
+# repo            = "subagentapps/managed-subagents"   # required for non-local dispositions
+# branch          = "main"                              # base branch for the work
+# label           = "orchestrator"                      # GitHub label to apply
+# automerge       = false                               # off in v0.1; v0.3 enables
+# deep_review     = false                               # if true, run /ultrareview after /review
+# depends_on      = []                                  # list of task ids to complete first
+#
+# Example below is commented out. Uncomment / replace when wiring real tasks.
+#
+# [[task]]
+# id          = "example-001"
+# title       = "Add a Deno comparison to the bun installation guide"
+# prompt      = """
+# Open scripts/install/bun-installation-guide.md and add a section
+# titled '## Deno alternative' with installation, equivalence to npm
+# scripts, and the one known incompatibility (better-sqlite3 needs
+# special handling). Keep under 40 lines.
+# """
+# disposition = "claude-mention"
+# repo        = "subagentapps/managed-subagents"
+# branch      = "main"
+# label       = "orchestrator"
