@@ -8,6 +8,7 @@ on:
     # ~$1 of Opus per review. If a PR touches *any* file outside these
     # paths, the review still runs.
     paths-ignore:
+      # Lockfiles + binaries — Opus can't review autogen meaningfully.
       - "**/package-lock.json"
       - "**/pnpm-lock.yaml"
       - "**/yarn.lock"
@@ -17,10 +18,20 @@ on:
       - "**/*.gif"
       - "**/*.svg"
       - "**/*.ico"
+      # GitHub config that doesn't benefit from review
       - ".github/CODEOWNERS"
       - ".github/dependabot.yml"
       - "**/CHANGELOG.md"
       - "subagent-commands/whats-new/**/*.png"
+      # Spec / project-memory docs — text content where review found 0
+      # actionable issues across PRs #10, #13, #18, #20 (~$4.87 burned).
+      # Code PRs still get reviewed; pure-docs PRs in these dirs skip.
+      - "**/docs/**"
+      - "subagent-orchestrator/CLAUDE.md"
+      - "subagent-orchestrator/PROJECT_PLAN.md"
+      - "**/M*-*.md"
+      - "subagent-mcp-servers/README.md"
+      - "subagent-orchestrator/docs/**"
 
 jobs:
   claude-review:
