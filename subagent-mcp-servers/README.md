@@ -25,9 +25,9 @@ Score: **Tier 1** = install now (≥3 criteria hit). **Tier 2** = install eventu
 
 ---
 
-## Tier 1 — install now (7 servers)
+## Tier 1 — install now (9 servers)
 
-These hit ≥3 criteria each. Going into `~/.claude/settings.json` `mcpServers` next tick.
+These hit ≥3 criteria OR were explicitly upgraded by the user. Going into `~/.claude/settings.json` `mcpServers` next tick.
 
 | Server | Latest | Score | Why |
 |---|---|---|---|
@@ -38,6 +38,8 @@ These hit ≥3 criteria each. Going into `~/.claude/settings.json` `mcpServers` 
 | `@modelcontextprotocol/server-sequential-thinking` | 2025.12.18 | O,V | Useful for orchestrator's classify+dispatch reasoning loops on ambiguous tasks. |
 | `@modelcontextprotocol/server-everything` | 2026.1.26 | O | Test harness — exercises all MCP features. Dev-only; use for orchestrator E2E testing. |
 | `@anthropic-ai/sandbox-runtime` | 0.0.49 | O,V | Sandboxing for orchestrator hard rails (PROJECT_PLAN §5 M8). |
+| `@modelcontextprotocol/server-redis` | 2025.4.25 | C,V | **User-promoted from Tier 2.** Aligns with CLI_COWORK_PLAN Option C (Upstash Redis canonical). Useful even before Upstash lands — local Docker Redis for orchestrator queue + caching. |
+| `@anthropic-ai/claude-trace` | 0.1.2 | O,V | **User-promoted from Tier 2.** OTEL trace viewer for Claude Code sessions. Trace-our-data is the priority — this lets us see exactly what every dispatched session did, with timing. Pair with `store/db.ts` for structured telemetry vs trace timelines. |
 
 Install priority within Tier 1:
 1. `server-github` — largest immediate leverage (replaces shellouts already in main)
@@ -50,27 +52,65 @@ Install priority within Tier 1:
 
 ---
 
-## Tier 2 — install eventually (7 servers)
+## Tier 2 — install eventually (5 servers)
 
 | Server | Latest | Score | Note |
 |---|---|---|---|
 | `@modelcontextprotocol/server-puppeteer` | 2025.5.12 | C | Crawler tier-4 alt; redundant with Cloudflare Browser Rendering. Install if going local-first for the crawler |
-| `@modelcontextprotocol/server-redis` | 2025.4.25 | V | Useful when caching layer lands per CLI_COWORK_PLAN Option C |
 | `@modelcontextprotocol/server-slack` | 2025.4.25 | C | Already in cowork plugin connector list; install when notifications matter |
 | `@modelcontextprotocol/server-pdf` | 1.7.0 | C | Covered by `subagent-cowork/pdf-viewer` plugin (which uses this same server underneath) |
 | `@anthropic-ai/mcpb` | 2.1.2 | V | MCP Bundles tooling — install when packaging our own MCP servers for distribution |
-| `@anthropic-ai/claude-trace` | 0.1.2 | O | OTEL trace viewer — pair with `store/db.ts` once we have enough dispatch volume |
 | `@anthropic-ai/dxt` | 0.2.6 | V | Desktop Extensions tooling — install when shipping a Claude Desktop add-on |
 
 ---
 
-## Tier 3 — skip (most of the list)
+## Tier 1.5 — MCP App build kit (NEW: user wants to build an MCP App)
 
-### `ochafik`'s 1.7.0 MCP App demos (14 servers)
-`server-{budget-allocator, cohort-heatmap, customer-segmentation, map, scenario-modeler, shadertoy, sheet-music, system-monitor, threejs, transcript, video-resource, wiki-explorer, debug, ext-apps}` — these are **example apps demonstrating MCP App SDK capabilities**, not infrastructure. Useful as references when we build our own MCP App; not as runtime servers.
+User directive: **build an MCP App**. Per [modelcontextprotocol.io/extensions/apps/overview](https://modelcontextprotocol.io/extensions/apps/overview), MCP Apps are interactive UI applications that render inside MCP hosts like Claude Desktop. The `ext-apps` SDK + framework scaffolds + `ochafik`'s 1.7.0 demo cluster are the **build kit** for this.
 
-### Framework demo scaffolds (6 servers)
-`server-basic-{preact, react, solid, svelte, vanillajs, vue}` — empty starter templates. Skip.
+Reclassified from "Tier 3 demos" to **install + study as references**:
+
+### Core MCP App SDK
+| Server | Latest | Use |
+|---|---|---|
+| `@modelcontextprotocol/ext-apps` | 1.7.0 | The MCP Apps SDK itself — required to build any MCP App |
+
+### Framework starter scaffolds (pick one to fork)
+| Server | Latest | Framework |
+|---|---|---|
+| `@modelcontextprotocol/server-basic-react` | 1.7.0 | React — best fit (matches our subagent-typescript stack) |
+| `@modelcontextprotocol/server-basic-vue` | 1.7.0 | Vue — alt |
+| `@modelcontextprotocol/server-basic-svelte` | 1.7.0 | Svelte — alt |
+| `@modelcontextprotocol/server-basic-solid` | 1.7.0 | Solid — alt |
+| `@modelcontextprotocol/server-basic-preact` | 1.7.0 | Preact — alt (lightweight) |
+| `@modelcontextprotocol/server-basic-vanillajs` | 1.7.0 | Vanilla JS — alt (no framework) |
+
+### Reference MCP Apps to study (12 examples)
+For learning patterns. Not all need to be installed — study via `npm view` or GitHub source. Each maps to a publication-quality interactive content type:
+
+| Server | Pattern it demonstrates |
+|---|---|
+| `server-shadertoy` | GLSL shader rendering — like the [transformer-circuits.pub/2026/emotions](https://transformer-circuits.pub/2026/emotions/index.html) interactive viz style |
+| `server-threejs` | 3D scene rendering — interactive interp diagrams |
+| `server-sheet-music` | ABC-notation rendering — domain-specific viz |
+| `server-system-monitor` | Real-time stats — like the dispatch dashboards we'll need |
+| `server-cohort-heatmap` | Retention analysis — useful for crawler analytics |
+| `server-customer-segmentation` | Filtering UI — generic UX pattern |
+| `server-budget-allocator` | Interactive financial sliders — applicable to /usage cost tracking |
+| `server-scenario-modeler` | What-if modeling — applicable to orchestrator planning |
+| `server-transcript` | Live speech transcription — applicable to recording orchestrator runs |
+| `server-video-resource` | Base64 video as MCP resource — pattern for embedded media |
+| `server-wiki-explorer` | Graph navigation — applicable to entity-graph exploration in SHARED_DATA_MODEL |
+| `server-map` | CesiumJS 3D globe — geo viz |
+| `server-debug` | Tests all SDK capabilities — sanity check our own MCP App against |
+
+**Build plan:** fork `server-basic-react` as the seed, study `server-shadertoy` + `server-system-monitor` for interactive patterns we want, build a `subagentapps/orchestrator-dashboard` MCP App that renders dispatch-log stats + live PR status from inside Claude Desktop.
+
+This becomes a **new milestone** in `subagent-orchestrator/PROJECT_PLAN.md` (call it M10: orchestrator-dashboard MCP App).
+
+---
+
+## Tier 3 — skip (much smaller now)
 
 ### Out-of-scope integrations (6 servers)
 `server-{gdrive, google-maps, everart, aws-kb-retrieval, brave-search, gitlab}` — useful for users who need them, but none align with this repo's vision (no GDrive in CLI_COWORK_PLAN, no Brave Search in crawler tier hierarchy, no GitLab dispatch path).
@@ -137,9 +177,19 @@ After confirming the above, the install is a `~/.claude/settings.json` edit addi
     "sequential-thinking": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "redis": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-redis", "redis://localhost:6379"]
+      // For Upstash: use the rediss://... URL from Upstash console.
+    },
+    "claude-trace": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/claude-trace"]
     }
     // Defer postgres + everything + sandbox-runtime to dedicated install PRs
     // when the supporting infra is ready.
+    // Defer ext-apps + server-basic-react to the M10 MCP App build PR.
   }
 }
 ```
