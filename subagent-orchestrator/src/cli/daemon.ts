@@ -1,6 +1,7 @@
 // `subagent-orchestrator daemon` — long-running babysit driver.
 
 import { daemon } from "../daemon.js";
+import { openDb } from "../store/db.js";
 import type { BabysitResult } from "../babysit.js";
 
 export interface DaemonCommandOptions {
@@ -15,10 +16,13 @@ export interface DaemonCommandOptions {
   maxIterations?: number;
   dailyBudgetUsd?: number;
   requireChecksPass?: boolean;
+  /** When set, persist each PR sweep into dispatch_log at this DB path. */
+  dbPath?: string;
 }
 
 export async function runDaemon(options: DaemonCommandOptions = {}): Promise<void> {
   console.log(`[daemon] starting; interval=${options.intervalSeconds ?? 600}s budget=$${options.dailyBudgetUsd ?? 50}`);
+  const db = options.dbPath ? openDb({ path: options.dbPath }) : undefined;
 
   const ac = new AbortController();
   const stop = (sig: string) => {
@@ -37,6 +41,7 @@ export async function runDaemon(options: DaemonCommandOptions = {}): Promise<voi
 
   const result = await daemon({
     ...options,
+    ...(db ? { db } : {}),
     abortSignal: ac.signal,
     onIteration,
   });

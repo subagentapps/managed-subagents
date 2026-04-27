@@ -1,6 +1,7 @@
 // `subagent-orchestrator babysit` — sweep open PRs: review, merge approvals.
 
 import { babysit } from "../babysit.js";
+import { openDb } from "../store/db.js";
 
 export interface BabysitCommandOptions {
   repo?: string;
@@ -11,11 +12,14 @@ export interface BabysitCommandOptions {
   iterationBudgetUsd?: number;
   maxReviews?: number;
   requireChecksPass?: boolean;
+  /** When set, record each PR sweep into dispatch_log at this DB path. */
+  dbPath?: string;
 }
 
 export async function runBabysit(options: BabysitCommandOptions = {}): Promise<void> {
   console.log(`[babysit] sweeping open PRs...`);
-  const result = await babysit(options);
+  const db = options.dbPath ? openDb({ path: options.dbPath }) : undefined;
+  const result = await babysit({ ...options, ...(db ? { db } : {}) });
 
   console.log(`[babysit] scanned ${result.scanned} PR(s); spent $${result.totalReviewCostUsd.toFixed(2)}`);
   if (result.budgetExhausted) {

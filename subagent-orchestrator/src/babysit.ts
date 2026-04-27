@@ -18,7 +18,10 @@ import { promisify } from "node:util";
 
 import { merge, type MergeResult } from "./merge.js";
 import { review, type ReviewResult } from "./review.js";
+import { recordDispatch, updateDispatch } from "./store/db.js";
 import { fetchPrStatus, type PrStatus } from "./watch/gh.js";
+
+import type Database from "better-sqlite3";
 
 const execFileAsync = promisify(execFile);
 
@@ -56,6 +59,12 @@ export interface BabysitOptions {
   checkSkipPattern?: RegExp;
   /** Inject for testing — replaces fetchPrStatus(). */
   fetchPrStatusOverride?: typeof fetchPrStatus;
+  /**
+   * Optional dispatch_log database. When provided, each PR sweep is
+   * recorded as a row (task_id='babysit-pr-<N>', disposition='babysit-review')
+   * so 'dispatch summary' / 'dispatch query' surface babysit activity.
+   */
+  db?: Database.Database;
 }
 
 export interface BabysitItem {
@@ -83,6 +92,23 @@ export interface BabysitResult {
 
 const DEFAULT_BUDGET = 5;
 const DEFAULT_MAX_REVIEWS = 5;
+
+/**
+ * Map a BabysitItem onto the dispatch_log status enum:
+ *   merged                 → 'merged'
+ *   APPROVE w/o merge      → 'ready-for-merge'  (merge was skipped, e.g. rail-blocked)
+ *   REQUEST_CHANGES/COMMENT → 'needs-human'
+ *   error or pre-review skip → 'failed'
+ *   else (no review done yet, no error) → 'dispatched'
+ */
+function babysitStatus(item: BabysitItem): "merged" | "ready-for-merge" | "needs-human" | "failed" | "dispatched" {
+  if (item.merged) return "merged";
+  if (item.error) return "failed";
+  if (item.preReviewSkip) return "failed";
+  if (item.verdict === "APPROVE") return "ready-for-merge";
+  if (item.verdict === "REQUEST_CHANGES" || item.verdict === "COMMENT") return "needs-human";
+  return "dispatched";
+}
 
 export async function babysit(options: BabysitOptions = {}): Promise<BabysitResult> {
   const exec = options.execFileOverride ?? execFileAsync;
@@ -143,6 +169,25 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
       merged: false,
     };
 
+    // Telemetry: record dispatch row up front, update with outcome at end of loop iteration
+    const dispatchId = options.db
+      ? recordDispatch(options.db, {
+          taskId: `babysit-pr-${pr.number}`,
+          disposition: "babysit-review",
+        })
+      : null;
+    const finalize = (): void => {
+      if (options.db && dispatchId !== null) {
+        updateDispatch(options.db, dispatchId, {
+          status: babysitStatus(item),
+          prNumber: pr.number,
+          ultrareviewUsed: false,
+          ...(item.reviewCostUsd !== undefined ? { costUsdEstimate: item.reviewCostUsd } : {}),
+        });
+      }
+      items.push(item);
+    };
+
     // 1.5. Optional CI gate — skip PRs whose meaningful checks haven't passed
     if (options.requireChecksPass) {
       let status: PrStatus;
@@ -154,7 +199,7 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
         const e = err as { message?: string };
         item.preReviewSkip = "checks-fetch-failed";
         item.error = `fetchPrStatus failed: ${e.message ?? "unknown"}`;
-        items.push(item);
+        finalize();
         continue;
       }
       const meaningfulChecks = status.checks.filter((c) => !skipPattern.test(c.name));
@@ -166,12 +211,12 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
       );
       if (anyPending) {
         item.preReviewSkip = "checks-pending";
-        items.push(item);
+        finalize();
         continue;
       }
       if (anyFailed) {
         item.preReviewSkip = "checks-failing";
-        items.push(item);
+        finalize();
         continue;
       }
     }
@@ -191,7 +236,7 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
     } catch (err) {
       const e = err as { message?: string };
       item.error = `review failed: ${e.message ?? "unknown"}`;
-      items.push(item);
+      finalize();
       continue;
     }
 
@@ -214,7 +259,7 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
       }
     }
 
-    items.push(item);
+    finalize();
   }
 
   return {
