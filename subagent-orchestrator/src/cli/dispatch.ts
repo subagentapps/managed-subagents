@@ -5,7 +5,7 @@
 //   subagent-orchestrator dispatch stats               — show recent dispatch_log rows
 
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
-import { openDb, queryDispatches, summarizeDispatches, type DispatchLogRow, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
+import { openDb, pruneDispatches, queryDispatches, summarizeDispatches, type DispatchLogRow, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
 import { loadTasks } from "../store/tasks.js";
 import type { OrchestrateResult } from "../orchestrator.js";
 import type { TaskResult } from "../types.js";
@@ -181,6 +181,38 @@ export function runDispatchSummary(options: DispatchSummaryCommandOptions = {}):
   console.log(
     `\nTOTAL across ${buckets.length} bucket(s): ${totals.total} dispatches, $${totals.totalCostUsd.toFixed(2)}, success rate ${overallRate}`,
   );
+}
+
+export interface DispatchPruneCommandOptions {
+  dbPath?: string;
+  before?: string;
+  olderThanDays?: number;
+  status?: string;
+  dryRun?: boolean;
+}
+
+export function runDispatchPrune(options: DispatchPruneCommandOptions = {}): void {
+  if (options.before === undefined && options.olderThanDays === undefined) {
+    console.error("dispatch prune requires --before <iso> or --older-than-days <n>");
+    process.exitCode = 2;
+    return;
+  }
+  const db = openDb(options.dbPath ? { path: options.dbPath } : {});
+  const pruneOpts: PruneDispatchesOptions = {};
+  if (options.before !== undefined) pruneOpts.before = options.before;
+  if (options.olderThanDays !== undefined) pruneOpts.olderThanDays = options.olderThanDays;
+  if (options.dryRun) pruneOpts.dryRun = true;
+  if (options.status) {
+    const list = options.status.split(",").map((s) => s.trim()).filter(Boolean) as Array<TaskResult["status"]>;
+    pruneOpts.status = list.length === 1 ? list[0] : list;
+  }
+
+  const result = pruneDispatches(db, pruneOpts);
+  if (options.dryRun) {
+    console.log(`[dry-run] would delete ${result.matched} row(s) older than ${result.cutoff}`);
+  } else {
+    console.log(`deleted ${result.deleted} row(s) older than ${result.cutoff}`);
+  }
 }
 
 function printResult(out: OrchestrateResult): void {

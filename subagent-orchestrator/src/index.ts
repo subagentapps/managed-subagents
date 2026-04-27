@@ -13,7 +13,7 @@ import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
-import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
+import { runDispatchAll, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
@@ -72,6 +72,24 @@ dispatch
   .option("-n, --limit <n>", "Number of rows", (v) => Number(v), 20)
   .action((opts: { db?: string; limit?: number }) => {
     runDispatchStats({ dbPath: opts.db, limit: opts.limit });
+  });
+
+dispatch
+  .command("prune")
+  .description("Delete old dispatch_log rows (requires --before or --older-than-days to bound)")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--before <iso>", "Delete rows dispatched before this ISO 8601 timestamp")
+  .option("--older-than-days <n>", "Delete rows older than N days", (v) => Number(v))
+  .option("--status <list>", "Only prune rows with these statuses (comma-separated)")
+  .option("--dry-run", "Count matching rows but don't delete")
+  .action((opts: { db?: string; before?: string; olderThanDays?: number; status?: string; dryRun?: boolean }) => {
+    runDispatchPrune({
+      dbPath: opts.db,
+      before: opts.before,
+      olderThanDays: opts.olderThanDays,
+      status: opts.status,
+      dryRun: opts.dryRun,
+    });
   });
 
 dispatch

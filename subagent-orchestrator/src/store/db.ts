@@ -272,6 +272,73 @@ export function summarizeDispatches(
   return out;
 }
 
+export interface PruneDispatchesOptions {
+  /** Delete rows older than this ISO 8601 timestamp. */
+  before?: string;
+  /** Delete rows older than this many days. */
+  olderThanDays?: number;
+  /** Only prune rows whose status matches (or is in this array). */
+  status?: TaskResult["status"] | Array<TaskResult["status"]>;
+  /** If true, just count matching rows without deleting. */
+  dryRun?: boolean;
+}
+
+export interface PruneDispatchesResult {
+  matched: number;
+  deleted: number;
+  cutoff: string;
+}
+
+/**
+ * Delete rows from dispatch_log matching the supplied filters.
+ *
+ * At least one of `before` or `olderThanDays` must be supplied to bound
+ * what gets deleted. Status filter optional. With dryRun=true, returns
+ * the matched count without deleting.
+ *
+ * Throws if neither cutoff is supplied — refuses to wipe the whole table.
+ */
+export function pruneDispatches(
+  db: Database.Database,
+  options: PruneDispatchesOptions,
+): PruneDispatchesResult {
+  let cutoff: string;
+  if (options.before !== undefined) {
+    cutoff = options.before;
+  } else if (options.olderThanDays !== undefined) {
+    const ms = Date.now() - options.olderThanDays * 24 * 60 * 60 * 1000;
+    cutoff = new Date(ms).toISOString();
+  } else {
+    throw new Error("pruneDispatches requires either 'before' or 'olderThanDays' to bound the deletion");
+  }
+
+  const where: string[] = ["dispatched_at < ?"];
+  const vals: unknown[] = [cutoff];
+
+  if (options.status !== undefined) {
+    const statuses = Array.isArray(options.status) ? options.status : [options.status];
+    if (statuses.length > 0) {
+      where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+      vals.push(...statuses);
+    }
+  }
+
+  const whereClause = where.join(" AND ");
+  const matchedRow = db
+    .prepare(`SELECT COUNT(*) AS n FROM dispatch_log WHERE ${whereClause}`)
+    .get(...vals) as { n: number };
+  const matched = matchedRow.n;
+
+  if (options.dryRun) {
+    return { matched, deleted: 0, cutoff };
+  }
+
+  const info = db
+    .prepare(`DELETE FROM dispatch_log WHERE ${whereClause}`)
+    .run(...vals);
+  return { matched, deleted: info.changes, cutoff };
+}
+
 function bucketKey(iso: string, granularity: "day" | "hour" | "month"): string {
   // dispatched_at is stored as ISO 8601, e.g. '2026-04-27T10:00:00Z'
   if (granularity === "month") return iso.slice(0, 7);
