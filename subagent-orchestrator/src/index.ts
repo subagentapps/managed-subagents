@@ -13,7 +13,7 @@ import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
-import { runDispatchAll, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
+import { runDispatchAll, runDispatchExport, runDispatchImport, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
@@ -72,6 +72,49 @@ dispatch
   .option("-n, --limit <n>", "Number of rows", (v) => Number(v), 20)
   .action((opts: { db?: string; limit?: number }) => {
     runDispatchStats({ dbPath: opts.db, limit: opts.limit });
+  });
+
+dispatch
+  .command("export")
+  .description("Serialize dispatch_log rows to JSON (stdout or --out file)")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--out <file>", "Write to file instead of stdout")
+  .option("--status <list>", "Comma-separated statuses to include")
+  .option("--task <id>", "Exact task_id match")
+  .option("--disposition <name>", "Exact disposition match")
+  .option("--since <iso>", "ISO 8601 timestamp; only rows dispatched at/after")
+  .option("--until <iso>", "ISO 8601 timestamp; only rows dispatched at/before")
+  .action((opts: { db?: string; out?: string; status?: string; task?: string; disposition?: string; since?: string; until?: string }) => {
+    runDispatchExport({
+      dbPath: opts.db,
+      out: opts.out,
+      status: opts.status,
+      taskId: opts.task,
+      disposition: opts.disposition,
+      since: opts.since,
+      until: opts.until,
+    });
+  });
+
+dispatch
+  .command("import <file>")
+  .description("Load a previously-exported JSON dump back into dispatch_log")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--on-conflict <mode>", "skip | replace | error (default skip)", "skip")
+  .option("--dry-run", "Report counts without writing")
+  .action((file: string, opts: { db?: string; onConflict?: string; dryRun?: boolean }) => {
+    const mode = opts.onConflict;
+    if (mode && !["skip", "replace", "error"].includes(mode)) {
+      console.error(`Invalid --on-conflict: ${mode} (expected skip|replace|error)`);
+      process.exitCode = 2;
+      return;
+    }
+    runDispatchImport({
+      dbPath: opts.db,
+      in: file,
+      onConflict: mode as "skip" | "replace" | "error" | undefined,
+      dryRun: opts.dryRun,
+    });
   });
 
 dispatch

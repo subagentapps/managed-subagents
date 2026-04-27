@@ -5,7 +5,8 @@
 //   subagent-orchestrator dispatch stats               — show recent dispatch_log rows
 
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
-import { openDb, pruneDispatches, queryDispatches, summarizeDispatches, type DispatchLogRow, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
+import { exportDispatches, importDispatches, openDb, pruneDispatches, queryDispatches, summarizeDispatches, type DispatchExportFile, type DispatchLogRow, type ImportDispatchesOptions, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
+import { readFileSync, writeFileSync } from "node:fs";
 import { loadTasks } from "../store/tasks.js";
 import type { OrchestrateResult } from "../orchestrator.js";
 import type { TaskResult } from "../types.js";
@@ -213,6 +214,82 @@ export function runDispatchPrune(options: DispatchPruneCommandOptions = {}): voi
   } else {
     console.log(`deleted ${result.deleted} row(s) older than ${result.cutoff}`);
   }
+}
+
+export interface DispatchExportCommandOptions {
+  dbPath?: string;
+  out?: string;
+  status?: string;
+  taskId?: string;
+  disposition?: string;
+  since?: string;
+  until?: string;
+}
+
+export function runDispatchExport(options: DispatchExportCommandOptions = {}): void {
+  const db = openDb(options.dbPath ? { path: options.dbPath } : { readonly: true });
+  const filters: QueryDispatchesFilters = {};
+  if (options.status) {
+    const list = options.status.split(",").map((s) => s.trim()).filter(Boolean) as Array<TaskResult["status"]>;
+    filters.status = list.length === 1 ? list[0] : list;
+  }
+  if (options.taskId) filters.taskId = options.taskId;
+  if (options.disposition) filters.disposition = options.disposition;
+  if (options.since) filters.since = options.since;
+  if (options.until) filters.until = options.until;
+
+  const file = exportDispatches(db, filters);
+  const json = JSON.stringify(file, null, 2);
+  if (options.out) {
+    writeFileSync(options.out, json);
+    console.log(`exported ${file.rows.length} row(s) → ${options.out}`);
+  } else {
+    process.stdout.write(json + "\n");
+  }
+}
+
+export interface DispatchImportCommandOptions {
+  dbPath?: string;
+  in: string;
+  onConflict?: "skip" | "replace" | "error";
+  dryRun?: boolean;
+}
+
+export function runDispatchImport(options: DispatchImportCommandOptions): void {
+  let raw: string;
+  try {
+    raw = readFileSync(options.in, "utf8");
+  } catch (err) {
+    console.error(`Cannot read ${options.in}: ${(err as Error).message}`);
+    process.exitCode = 2;
+    return;
+  }
+  let parsed: DispatchExportFile;
+  try {
+    parsed = JSON.parse(raw) as DispatchExportFile;
+  } catch (err) {
+    console.error(`Invalid JSON in ${options.in}: ${(err as Error).message}`);
+    process.exitCode = 2;
+    return;
+  }
+
+  const db = openDb(options.dbPath ? { path: options.dbPath } : {});
+  const importOpts: ImportDispatchesOptions = {};
+  if (options.onConflict) importOpts.onConflict = options.onConflict;
+  if (options.dryRun) importOpts.dryRun = true;
+
+  let result;
+  try {
+    result = importDispatches(db, parsed, importOpts);
+  } catch (err) {
+    console.error(`Import failed: ${(err as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const verb = options.dryRun ? "would " : "";
+  console.log(
+    `${verb}insert ${result.inserted}; ${verb}skip ${result.skipped}; ${verb}replace ${result.replaced}`,
+  );
 }
 
 function printResult(out: OrchestrateResult): void {
