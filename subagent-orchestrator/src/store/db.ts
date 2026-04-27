@@ -272,6 +272,110 @@ export function summarizeDispatches(
   return out;
 }
 
+export interface DispatchExportFile {
+  /** Schema version of this export file. Bumped when the row shape changes. */
+  schemaVersion: 1;
+  /** ISO 8601 timestamp the export was generated. */
+  exportedAt: string;
+  rows: DispatchLogRow[];
+}
+
+/**
+ * Serialize dispatch_log rows to a portable JSON shape. Filters reuse
+ * queryDispatches semantics. Rows are emitted as-is (no scrubbing) so
+ * the export can round-trip through importDispatches().
+ */
+export function exportDispatches(
+  db: Database.Database,
+  filters: QueryDispatchesFilters = {},
+): DispatchExportFile {
+  const rows = queryDispatches(db, { ...filters, limit: filters.limit ?? 1_000_000 });
+  return {
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    rows,
+  };
+}
+
+export interface ImportDispatchesOptions {
+  /**
+   * What to do when a row's id already exists in the DB:
+   *   'skip'    — leave existing row, don't re-insert (default)
+   *   'replace' — DELETE existing then INSERT
+   *   'error'   — throw on first conflict
+   */
+  onConflict?: "skip" | "replace" | "error";
+  /** When true, validate only — count what would happen without writing. */
+  dryRun?: boolean;
+}
+
+export interface ImportDispatchesResult {
+  inserted: number;
+  skipped: number;
+  replaced: number;
+}
+
+/**
+ * Insert rows from a previously-exported file. Validates schemaVersion;
+ * unrecognized versions throw rather than silently corrupting data.
+ *
+ * Honors onConflict policy per-row. Returns counts.
+ */
+export function importDispatches(
+  db: Database.Database,
+  file: DispatchExportFile,
+  options: ImportDispatchesOptions = {},
+): ImportDispatchesResult {
+  if (file.schemaVersion !== 1) {
+    throw new Error(`unsupported export schemaVersion=${file.schemaVersion}; expected 1`);
+  }
+  const onConflict = options.onConflict ?? "skip";
+
+  const idStmt = db.prepare(`SELECT id FROM dispatch_log WHERE id = ?`);
+  const insertStmt = db.prepare(
+    `INSERT INTO dispatch_log
+       (id, task_id, disposition, dispatched_at, pr_url, pr_number, pr_merged_at,
+        review_finding_count, ultrareview_used, cost_usd_estimate, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const deleteStmt = db.prepare(`DELETE FROM dispatch_log WHERE id = ?`);
+
+  let inserted = 0;
+  let skipped = 0;
+  let replaced = 0;
+
+  // All-or-nothing transaction so a mid-file error can't leave a half-imported state.
+  const tx = db.transaction(() => {
+    for (const row of file.rows) {
+      const exists = idStmt.get(row.id) !== undefined;
+      if (exists) {
+        if (onConflict === "error") {
+          throw new Error(`row id=${row.id} already exists; onConflict='error'`);
+        }
+        if (onConflict === "skip") {
+          skipped += 1;
+          continue;
+        }
+        // replace
+        if (!options.dryRun) deleteStmt.run(row.id);
+        replaced += 1;
+      } else {
+        inserted += 1;
+      }
+      if (!options.dryRun) {
+        insertStmt.run(
+          row.id, row.task_id, row.disposition, row.dispatched_at,
+          row.pr_url, row.pr_number, row.pr_merged_at,
+          row.review_finding_count, row.ultrareview_used, row.cost_usd_estimate, row.status,
+        );
+      }
+    }
+  });
+  tx();
+
+  return { inserted, skipped, replaced };
+}
+
 export interface PruneDispatchesOptions {
   /** Delete rows older than this ISO 8601 timestamp. */
   before?: string;

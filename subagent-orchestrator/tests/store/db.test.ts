@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 
-import { listRecent, openDb, pruneDispatches, queryDispatches, recordDispatch, summarizeDispatches, updateDispatch } from "../../src/store/db.js";
+import { exportDispatches, importDispatches, listRecent, openDb, pruneDispatches, queryDispatches, recordDispatch, summarizeDispatches, updateDispatch, type DispatchExportFile } from "../../src/store/db.js";
 
 describe("orchestrator db", () => {
   let db: Database.Database;
@@ -315,5 +315,96 @@ describe("pruneDispatches", () => {
   it("returns 0 when nothing matches", () => {
     const result = pruneDispatches(db, { before: "2020-01-01T00:00:00Z" });
     expect(result.deleted).toBe(0);
+  });
+});
+
+describe("exportDispatches / importDispatches", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = openDb({ path: ":memory:" });
+    const r = (id: string, at: string, status: "merged" | "failed") => {
+      const rid = recordDispatch(db, { taskId: id, disposition: "local", dispatchedAt: at });
+      updateDispatch(db, rid, { status, ultrareviewUsed: false, costUsdEstimate: 0.10 });
+    };
+    r("a", "2026-04-26T00:00:00Z", "merged");
+    r("b", "2026-04-27T00:00:00Z", "failed");
+  });
+
+  it("export emits schemaVersion + rows", () => {
+    const file = exportDispatches(db);
+    expect(file.schemaVersion).toBe(1);
+    expect(file.rows).toHaveLength(2);
+    expect(file.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("export honors filters", () => {
+    const file = exportDispatches(db, { status: "failed" });
+    expect(file.rows).toHaveLength(1);
+    expect(file.rows[0]?.task_id).toBe("b");
+  });
+
+  it("import round-trips into a fresh DB", () => {
+    const file = exportDispatches(db);
+    const fresh = openDb({ path: ":memory:" });
+    const result = importDispatches(fresh, file);
+    expect(result.inserted).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(listRecent(fresh)).toHaveLength(2);
+  });
+
+  it("import skip policy keeps existing rows on conflict", () => {
+    const file = exportDispatches(db);
+    const result = importDispatches(db, file, { onConflict: "skip" });
+    expect(result.inserted).toBe(0);
+    expect(result.skipped).toBe(2);
+  });
+
+  it("import replace policy overwrites existing rows", () => {
+    const file = exportDispatches(db);
+    const aRow = file.rows.find((r) => r.task_id === "a")!;
+    aRow.status = "needs-human";
+    const result = importDispatches(db, file, { onConflict: "replace" });
+    expect(result.replaced).toBe(2);
+    const after = listRecent(db);
+    const a = after.find((r) => r.task_id === "a");
+    expect(a?.status).toBe("needs-human");
+  });
+
+  it("import error policy throws on conflict", () => {
+    const file = exportDispatches(db);
+    expect(() => importDispatches(db, file, { onConflict: "error" })).toThrow(/already exists/);
+  });
+
+  it("import dryRun does not write but counts", () => {
+    const file = exportDispatches(db);
+    const fresh = openDb({ path: ":memory:" });
+    const result = importDispatches(fresh, file, { dryRun: true });
+    expect(result.inserted).toBe(2);
+    expect(listRecent(fresh)).toHaveLength(0);
+  });
+
+  it("import rejects unsupported schemaVersion", () => {
+    const bad: DispatchExportFile = {
+      schemaVersion: 99 as unknown as 1,
+      exportedAt: "x",
+      rows: [],
+    };
+    expect(() => importDispatches(db, bad)).toThrow(/schemaVersion/);
+  });
+
+  it("import is atomic — error policy rollback leaves db unchanged", () => {
+    const file = exportDispatches(db);
+    const fresh = openDb({ path: ":memory:" });
+    // Pre-populate with row id matching one in file to trigger conflict
+    const conflictId = file.rows[1]!.id;
+    const cid = recordDispatch(fresh, { taskId: "preexisting", disposition: "local", dispatchedAt: "2026-04-25T00:00:00Z" });
+    // Force the same id to exist
+    fresh.prepare("UPDATE dispatch_log SET id=? WHERE id=?").run(conflictId, cid);
+    expect(() => importDispatches(fresh, file, { onConflict: "error" })).toThrow();
+    // The first row would have been inserted absent the transaction; with rollback only the preexisting row remains
+    const rows = listRecent(fresh);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.task_id).toBe("preexisting");
   });
 });
