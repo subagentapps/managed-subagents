@@ -137,3 +137,25 @@ This document was written as part of the resulting deliverable.
 - The skill catalog: `subagent-skills/`
 - The plugin catalog: `subagent-cowork/`
 - The pre-research draft (kept for traceability): `INFRASTRUCTURE_PLAN.draft.md`
+
+---
+
+## Phase 8 — autonomous orchestration speed-run (2026-04-26 → 2026-04-27)
+
+User invoked `/loop` with directive to autonomously orchestrate multi-turn, multi-session work. Result: 32+ PRs merged in ~3.5h, then conservative pivot after hitting Anthropic monthly usage cap on PR #26.
+
+| Sub-phase | Outcome |
+|---|---|
+| 8a — Fast PRs | PRs #1–#20 merged across MCP triage, M0–M5 orchestrator + tests, paths-ignore CI tuning, MCP server install (6 servers via PR #19), M10 spec |
+| 8b — Speed-run mode | PRs #21–#24 in parallel: M6 ultraplan/autofix dispatchers, M9 main loop, status.sh |
+| 8c — Cap hit on PR #26 | "You've hit your org's monthly usage limit" — auto-review pipeline temporarily offline. Documented in `SESSION_2026-04-26_BILLING_EVENT.md` (PR #28) |
+| 8d — Conservative pivot | PRs #28–#32: billing-event doc, Makefile, README, MIT LICENSE, TASKS_TODO.md — pure docs, no API consumption |
+| 8e — Plan-completion batch | This PR (PRs ~#33+) — close all open §-decisions across the 4 plan files; rewrite CLI_COWORK_PLAN per the deeply-re-read claude-code-on-the-web doc; lock SESSION_HISTORY.md with Phase 8 marker |
+
+**Cost summary:** ~$18.62 across 17 successful Opus auto-reviews. Cap-blocked attempts on PRs #26/27/28/29/30/31/32 cost $0 (action failed before Claude invocation). 100+ vitest cases on main. 6 MCP servers installed locally.
+
+**Key new finding from this phase** (drove the CLI_COWORK_PLAN rewrite): the `claude-code-on-the-web` allowlist is **user-extensible via Custom mode**. Earlier drafts treated it as fixed; that was wrong. Neon, Upstash, and custom subdomains are all reachable via Custom-allowlist environments.
+
+---
+
+> **STATUS:** SESSION_HISTORY.md **locked at 2026-04-27**. Future sessions append a NEW dated file (`SESSION_2026-MM-DD.md` or similar) rather than this file. This file is the durable arc of the day-1 work; further sessions get their own file so the diff history stays readable.

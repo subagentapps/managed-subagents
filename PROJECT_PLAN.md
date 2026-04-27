@@ -2,6 +2,8 @@
 
 Generated 2026-04-26. A retrieval-ready mirror of Anthropic + Claude Code documentation, scoped for injection into Claude Code subagent prompts at runtime.
 
+> **STATUS (2026-04-27):** This plan describes the **subagent-docs subproject** specifically — a docs-corpus mirror. The repo `managed-subagents` evolved during the day-1 speed-run to encompass much more (orchestrator, crawlers, cowork plugins, MCP servers). The patterns in this file (JSONL + Redis two-tier store, Context7 ingestion, llms.txt sources) remain the canonical design for the docs-corpus subproject *when it is built*. No `subagent-docs/` directory exists today — work absorbs into related subprojects. See `CLAUDE_CLI_MAX_PLAN_AGENT_AS_AUTONOMOUS_WEB_PR_ORCHESTRATOR_PLAN.md` for the orchestrator design that took priority. All §11 decisions settled.
+
 ---
 
 ## 0. Why this repo exists
@@ -313,14 +315,14 @@ Total: ~16h to working v0.1, ~20h with M6.
 
 ---
 
-## 11. Open decisions
+## 11. Decisions (settled 2026-04-27)
 
-These are decisions to make *before* M0, not during:
-
-1. **Redis: local Docker, Upstash cloud, or both?** Recommend local Docker for dev (fast, free, RediSearch included) + Upstash for shared/prod. Loader is the same code; only the connection string differs.
-2. **Are the snapshots `git lfs`?** 20MB total, 11 files — no, just commit them. Re-evaluate at >100MB.
-3. **License?** MIT, matching Context7 itself. Or private if you intend to embed proprietary internal docs.
-4. **Repo location.** Settled: `github.com/subagentapps/managed-subagents` (cloned to `~/claude-projects/github-organizations/subagentapps/managed-subagents`). Note the repo name (`managed-subagents`) does not match the artifact this plan describes (`subagent-docs`) — see §12 for the reconciliation question.
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Redis: local Docker, Upstash cloud, or both? | **Both.** Local Docker for dev (fast, free, RediSearch included); Upstash for shared/prod. Loader is the same code; only the connection string differs. Aligns with the Tier 1 MCP install of `server-redis` (PR #19). |
+| 2 | Snapshots in git LFS? | **No.** 20MB total, 11 files — commit directly. Re-evaluate at >100MB. |
+| 3 | License? | **MIT.** Settled in PR #31; matches Anthropic skills + Context7. |
+| 4 | Repo location? | **Settled** at `github.com/subagentapps/managed-subagents`. Repo name (`managed-subagents`) intentionally encompasses more than this plan's `subagent-docs` scope — see STATUS header below. |
 
 ---
 

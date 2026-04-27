@@ -3,7 +3,7 @@
 # Run from the repo root. Self-documenting: `make` lists every target.
 
 .PHONY: help install test typecheck lint status orchestrator-test orchestrator-typecheck \
-        mcp-install mcp-list cowork-list prs prs-merged
+        mcp-install mcp-list cowork-list prs prs-merged decisions
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) \
@@ -44,3 +44,16 @@ prs:  ## List open PRs
 
 prs-merged:  ## Count merged PRs (this session ≈ 27 + ongoing)
 	@gh pr list --state merged --limit 200 --json number --jq '. | length'
+
+decisions:  ## Print STATUS markers from all root plan files
+	@echo "## Plan-file STATUS markers (settled / locked / frozen dates)"
+	@echo
+	@for f in PROJECT_PLAN.md SHARED_DATA_MODEL.md CLI_COWORK_PLAN.md \
+	          CLAUDE_CLI_MAX_PLAN_AGENT_AS_AUTONOMOUS_WEB_PR_ORCHESTRATOR_PLAN.md \
+	          SESSION_HISTORY.md; do \
+	  if [ -f "$$f" ]; then \
+	    echo "### $$f"; \
+	    grep -E "^>\s*\*\*STATUS" "$$f" | head -1 || echo "  (no STATUS marker)"; \
+	    echo; \
+	  fi; \
+	done
