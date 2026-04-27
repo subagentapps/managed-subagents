@@ -198,3 +198,83 @@ export function queryDispatches(
 
   return db.prepare(sql).all(...vals) as DispatchLogRow[];
 }
+
+export interface DispatchSummaryBucket {
+  /** Bucket key — date 'YYYY-MM-DD' for daily, 'YYYY-MM-DD HH' for hourly, etc. */
+  bucket: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  needsHuman: number;
+  merged: number;
+  inFlight: number;
+  totalCostUsd: number;
+  /** total / (succeeded + failed) — null when no terminal rows */
+  successRate: number | null;
+}
+
+export interface SummarizeDispatchesOptions extends QueryDispatchesFilters {
+  /** Aggregation granularity. Default 'day'. */
+  bucket?: "day" | "hour" | "month";
+}
+
+/**
+ * Aggregate dispatch_log rows by time bucket. Filters apply first
+ * (same shape as queryDispatches), then rows are bucketed by the
+ * date prefix of dispatched_at.
+ *
+ * 'succeeded' = status in (merged, ready-for-merge); 'failed' = status='failed';
+ * 'needsHuman' = needs-human; 'inFlight' = dispatched|reviewing.
+ *
+ * successRate is intentionally narrow: succeeded / (succeeded + failed),
+ * excluding in-flight rows that haven't terminated yet.
+ */
+export function summarizeDispatches(
+  db: Database.Database,
+  options: SummarizeDispatchesOptions = {},
+): DispatchSummaryBucket[] {
+  const { bucket = "day", ...filters } = options;
+  const rows = queryDispatches(db, { ...filters, limit: filters.limit ?? 10_000 });
+
+  const buckets = new Map<string, DispatchSummaryBucket>();
+  for (const row of rows) {
+    const key = bucketKey(row.dispatched_at, bucket);
+    let b = buckets.get(key);
+    if (!b) {
+      b = {
+        bucket: key, total: 0, succeeded: 0, failed: 0,
+        needsHuman: 0, merged: 0, inFlight: 0, totalCostUsd: 0,
+        successRate: null,
+      };
+      buckets.set(key, b);
+    }
+    b.total += 1;
+    b.totalCostUsd += row.cost_usd_estimate ?? 0;
+    if (row.status === "merged") {
+      b.merged += 1;
+      b.succeeded += 1;
+    } else if (row.status === "ready-for-merge") {
+      b.succeeded += 1;
+    } else if (row.status === "failed") {
+      b.failed += 1;
+    } else if (row.status === "needs-human") {
+      b.needsHuman += 1;
+    } else if (row.status === "dispatched" || row.status === "reviewing") {
+      b.inFlight += 1;
+    }
+  }
+
+  const out = Array.from(buckets.values()).sort((a, b) => b.bucket.localeCompare(a.bucket));
+  for (const b of out) {
+    const terminal = b.succeeded + b.failed;
+    b.successRate = terminal > 0 ? b.succeeded / terminal : null;
+  }
+  return out;
+}
+
+function bucketKey(iso: string, granularity: "day" | "hour" | "month"): string {
+  // dispatched_at is stored as ISO 8601, e.g. '2026-04-27T10:00:00Z'
+  if (granularity === "month") return iso.slice(0, 7);
+  if (granularity === "hour") return iso.slice(0, 13).replace("T", " ");
+  return iso.slice(0, 10);
+}

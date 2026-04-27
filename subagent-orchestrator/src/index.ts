@@ -13,7 +13,7 @@ import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
-import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
+import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
@@ -72,6 +72,34 @@ dispatch
   .option("-n, --limit <n>", "Number of rows", (v) => Number(v), 20)
   .action((opts: { db?: string; limit?: number }) => {
     runDispatchStats({ dbPath: opts.db, limit: opts.limit });
+  });
+
+dispatch
+  .command("summary")
+  .description("Aggregate dispatch_log rows by time bucket (day/hour/month) with totals")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--bucket <granularity>", "day | hour | month (default day)", "day")
+  .option("--status <list>", "Comma-separated statuses to include before bucketing")
+  .option("--task <id>", "Exact task_id match")
+  .option("--disposition <name>", "Exact disposition match")
+  .option("--since <iso>", "ISO 8601 timestamp; only rows dispatched at/after")
+  .option("--until <iso>", "ISO 8601 timestamp; only rows dispatched at/before")
+  .action((opts: { db?: string; bucket?: string; status?: string; task?: string; disposition?: string; since?: string; until?: string }) => {
+    const bucket = opts.bucket;
+    if (bucket && !["day", "hour", "month"].includes(bucket)) {
+      console.error(`Invalid --bucket: ${bucket} (expected day|hour|month)`);
+      process.exitCode = 2;
+      return;
+    }
+    runDispatchSummary({
+      dbPath: opts.db,
+      bucket: bucket as "day" | "hour" | "month" | undefined,
+      status: opts.status,
+      taskId: opts.task,
+      disposition: opts.disposition,
+      since: opts.since,
+      until: opts.until,
+    });
   });
 
 dispatch

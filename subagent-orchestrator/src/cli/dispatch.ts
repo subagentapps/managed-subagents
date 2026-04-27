@@ -5,7 +5,7 @@
 //   subagent-orchestrator dispatch stats               — show recent dispatch_log rows
 
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
-import { openDb, queryDispatches, type DispatchLogRow, type QueryDispatchesFilters } from "../store/db.js";
+import { openDb, queryDispatches, summarizeDispatches, type DispatchLogRow, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
 import { loadTasks } from "../store/tasks.js";
 import type { OrchestrateResult } from "../orchestrator.js";
 import type { TaskResult } from "../types.js";
@@ -130,6 +130,57 @@ function printDispatchTable(rows: DispatchLogRow[]): void {
   }
   const total = rows.reduce((s, r) => s + (r.cost_usd_estimate ?? 0), 0);
   console.log(`\nTotal cost across ${rows.length} rows: $${total.toFixed(2)}`);
+}
+
+export interface DispatchSummaryCommandOptions {
+  dbPath?: string;
+  bucket?: "day" | "hour" | "month";
+  status?: string;
+  taskId?: string;
+  disposition?: string;
+  since?: string;
+  until?: string;
+}
+
+export function runDispatchSummary(options: DispatchSummaryCommandOptions = {}): void {
+  const db = openDb(options.dbPath ? { path: options.dbPath } : {});
+  const summarizeOpts: SummarizeDispatchesOptions = { bucket: options.bucket ?? "day" };
+  if (options.status) {
+    const list = options.status.split(",").map((s) => s.trim()).filter(Boolean) as Array<TaskResult["status"]>;
+    summarizeOpts.status = list.length === 1 ? list[0] : list;
+  }
+  if (options.taskId) summarizeOpts.taskId = options.taskId;
+  if (options.disposition) summarizeOpts.disposition = options.disposition;
+  if (options.since) summarizeOpts.since = options.since;
+  if (options.until) summarizeOpts.until = options.until;
+
+  const buckets = summarizeDispatches(db, summarizeOpts);
+  if (buckets.length === 0) {
+    console.log("(no dispatches in window)");
+    return;
+  }
+
+  console.log("bucket           total  ok  fail  human  inflight  cost     rate");
+  console.log("---------------  -----  --  ----  -----  --------  -------  ------");
+  let totals = { total: 0, succeeded: 0, failed: 0, needsHuman: 0, inFlight: 0, totalCostUsd: 0 };
+  for (const b of buckets) {
+    const cost = `$${b.totalCostUsd.toFixed(2)}`;
+    const rate = b.successRate != null ? `${(b.successRate * 100).toFixed(0)}%` : "—";
+    console.log(
+      `${b.bucket.padEnd(15)}  ${String(b.total).padEnd(5)}  ${String(b.succeeded).padEnd(2)}  ${String(b.failed).padEnd(4)}  ${String(b.needsHuman).padEnd(5)}  ${String(b.inFlight).padEnd(8)}  ${cost.padEnd(7)}  ${rate}`,
+    );
+    totals.total += b.total;
+    totals.succeeded += b.succeeded;
+    totals.failed += b.failed;
+    totals.needsHuman += b.needsHuman;
+    totals.inFlight += b.inFlight;
+    totals.totalCostUsd += b.totalCostUsd;
+  }
+  const overallTerminal = totals.succeeded + totals.failed;
+  const overallRate = overallTerminal > 0 ? (totals.succeeded / overallTerminal * 100).toFixed(0) + "%" : "—";
+  console.log(
+    `\nTOTAL across ${buckets.length} bucket(s): ${totals.total} dispatches, $${totals.totalCostUsd.toFixed(2)}, success rate ${overallRate}`,
+  );
 }
 
 function printResult(out: OrchestrateResult): void {
