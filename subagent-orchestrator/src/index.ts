@@ -94,3 +94,4 @@ program
   });
 
 program.parse(process.argv);
+// Live-tested via `subagent-orchestrator ship` 2026-04-27 — proves the end-to-end pipeline works.
