@@ -2,6 +2,8 @@
 
 Generated 2026-04-26. Sibling plan to `CLI_COWORK_PLAN.md`. Where that plan covers shared persistent state across CLI / Cowork / web, this plan covers **the loop**: a Max-plan CLI agent that delegates work to autonomous web sessions which produce PRs back to this repo.
 
+> **STATUS (2026-04-27):** §9 decisions settled. M0–M9 + M8 hard rails are live in `subagent-orchestrator/` (across PRs #3, #6, #8, #11, #12, #15, #16, #17, #21, #22, #23, #26, #27). Remaining work tracked in `TASKS_TODO.md`.
+
 The user's existing `subagent-commands/whats-new/2026wk13/claude-code-week13.md` already encodes the load-bearing primitive for this pattern: `CLAUDE_CODE_OAUTH_TOKEN` from keychain → drives the Agent SDK programmatically as a "Managed Subagents SDK." This plan operationalizes it.
 
 ---
@@ -224,16 +226,20 @@ managed-subagents/
 
 ---
 
-## 9. Open decisions
+## 9. Decisions (settled 2026-04-27)
 
-1. **Language for the orchestrator** — Python (matches `subagent-python/`) or TypeScript (matches `subagent-typescript/` and the W13 SDK runbook). I'd default to TypeScript because the W13 runbook already targets it.
-2. **Task source v0.1** — TOML file (recommended) or direct CLI invocation
-3. **Auto-merge policy** — never (v0.1 default), or "for tasks tagged `automerge: true` only"
-4. **Concurrency cap** — 1 (v0.1) or 3 (v0.2)
-5. **Where review results post** — PR comment (default), Slack DM, both?
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Language for the orchestrator | **TypeScript.** Matches W13 SDK runbook + `subagent-typescript/`. Code lives at `subagent-orchestrator/` with M0–M9 + M8 rails landed across PRs #3, #6, #8, #11, #12, #15, #16, #17, #21, #22, #23, #26, #27. |
+| 2 | Task source v0.1 | **TOML file** (`subagent-orchestrator/tasks.toml`). Direct CLI invocation also supported via `subagent-orchestrator dispatch task <id>`. |
+| 3 | Auto-merge policy | **Never auto-merge to `main`/`master`/`production`/`release` in v0.1.** Hard-coded in `src/rails.ts` per M8 (PR #26). v0.3 may add per-task `automerge: true` opt-in for non-protected branches. |
+| 4 | Concurrency cap | **1 in v0.1.** Hard cap of 3 in `src/rails.ts` (M8). Sequential `orchestrateAll` is the v0.1 implementation; concurrent dispatch is M8.5+. |
+| 5 | Where review results post | **PR comment (default).** Slack via `subagent-cowork/sales`-style MCP integration when needed; Slack DM is M9.5+. |
+| 6 *(new)* | Web-runtime backend | **Option C′** per `CLI_COWORK_PLAN.md`. Cloud sessions use Custom-allowlist environment to reach Neon + Upstash + Cloudflare. Sandbox-preinstalled Postgres 16 + Redis 7.0 used as read-cache. |
+| 7 *(new)* | `--remote` parallelization | **Up to 3 concurrent cloud sessions** per `claude --remote` doc; matches the M8 cap. Each runs in its own VM. |
 
 ---
 
 ## 10. Status
 
-Awaiting decisions §9. Then `subagent-orchestrator/` becomes a sibling subproject with its own `PROJECT_PLAN.md` mirroring the shape of `subagent-typescript/PROJECT_PLAN.md`.
+**§9 settled.** `subagent-orchestrator/` is its own sibling subproject (live since PR #3) with its own `PROJECT_PLAN.md` and `CLAUDE.md`. M0–M9 + M8 rails complete. Remaining work tracked in `TASKS_TODO.md` (PR #32) — primarily M3+ wire-up of dispatchers into the main loop, M10 MCP App, and crawler implementation.

@@ -1,6 +1,8 @@
 # SHARED_DATA_MODEL.md
 
-Generated 2026-04-26. Shared by `subagent-typescript/` and `subagent-python/`. The data warehouse this describes is a single D1 database (initially) consumed by both subprojects via different fetcher implementations.
+Generated 2026-04-26. Shared by `subagent-typescript/` and `subagent-python/`. **Schema v1 frozen 2026-04-27** — §10 decisions settled.
+
+> **STATUS (2026-04-27):** Backend revised per `CLI_COWORK_PLAN.md` Option C′ — canonical SQL warehouse is **Neon Postgres 18** (not D1). D1 retained as an *optional cache layer* on the Cloudflare side and as the v0.0 prototype substrate; SQL semantics aligned to PG 18 baseline (compatible-down to PG 16 for cloud sandbox preinstalled fallback). DDL examples below still use SQLite syntax in places — translate per cell when implementing against Neon. dbt boundary unchanged.
 
 This file describes WHAT — the entity model, fact tables, dim tables, event log. The two subproject `PROJECT_PLAN.md` files describe HOW each language stack ingests into this shared model.
 
@@ -412,11 +414,11 @@ Sources with high value but hostile fetch profiles. Captured here so the data mo
 
 ---
 
-## 10. Open decisions (deferred from prior plans)
+## 10. Decisions (settled 2026-04-27)
 
-1. **Redis: local Docker, Upstash cloud, or both?** Crawler doesn't need Redis directly (D1 + R2 are sufficient). Reserve for `subagent-docs` corpus retrieval if/when built.
-2. **License?** MIT, matching upstream Anthropic skill licenses.
-3. **dbt project location?** Recommend `subagent-dbt/` as a *third* sibling subdirectory under `managed-subagents/`. Both crawlers write to D1; dbt models read from D1 and produce the curated layer.
-4. **Local development D1?** Use `wrangler d1 execute --local` for dev; `--remote` for prod. Same SQL, different connection.
-
-These do not block plan-writing; they get answered once code starts.
+| # | Decision | Resolution |
+|---|---|---|
+| 1 | Redis: local Docker, Upstash cloud, or both? | **Both.** Local Docker (or sandbox-preinstalled Redis 7.0) for dev; Upstash for shared/prod. Aligns with `CLI_COWORK_PLAN.md` Option C′ + Tier 1 MCP `server-redis` (PR #19). |
+| 2 | License? | **MIT.** Settled in PR #31. |
+| 3 | dbt project location? | **`subagent-dbt/`** as a third sibling subdirectory under `managed-subagents/`. Both crawlers write to Neon (canonical) + R2; dbt models read from Neon and produce the curated layer. |
+| 4 | Local development DB? | **Neon project per developer with branching** for shared schema; **local Docker Postgres 18** as offline fallback. The PG18 SQL surface is broadly compatible with the PG16 preinstalled in cloud sandbox; avoid PG18-only features (e.g. `JSON_TABLE` enhancements) where the same query needs to run in both. |
