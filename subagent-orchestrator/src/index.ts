@@ -18,10 +18,13 @@ import { runDoctor } from "./cli/doctor.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
+import { runTasksAdd } from "./cli/tasks-add.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksDeps } from "./cli/tasks-deps.js";
 import { runTasksList } from "./cli/tasks-list.js";
 import { runTasksValidate } from "./cli/tasks-validate.js";
+import type { Disposition } from "./types.js";
+import { DISPOSITIONS } from "./types.js";
 
 const program = new Command();
 
@@ -38,6 +41,54 @@ tasks
   .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
   .action((opts: { file?: string }) => {
     runTasksList({ tasksTomlPath: opts.file });
+  });
+
+tasks
+  .command("add <id>")
+  .description("Append a new task stanza to tasks.toml")
+  .option("-f, --file <path>", "Path to tasks.toml (default: ./tasks.toml)")
+  .option("--title <text>", "Task title (required)")
+  .option("--prompt <text>", "Task prompt body (required)")
+  .option("--disposition <name>", `One of ${DISPOSITIONS.join("|")}`)
+  .option("--repo <owner/name>", "GitHub repo (required for non-local dispositions)")
+  .option("--branch <name>", "Base branch (default 'main')")
+  .option("--label <name>", "GitHub label to apply")
+  .option("--automerge", "Set automerge=true")
+  .option("--deep-review", "Set deep_review=true")
+  .option("--depends-on <ids>", "Comma-separated list of task ids")
+  .option("--dry-run", "Print the rendered stanza but don't write")
+  .action((id: string, opts: {
+    file?: string; title?: string; prompt?: string;
+    disposition?: string; repo?: string; branch?: string; label?: string;
+    automerge?: boolean; deepReview?: boolean; dependsOn?: string;
+    dryRun?: boolean;
+  }) => {
+    if (!opts.title || !opts.prompt) {
+      console.error("tasks add requires --title and --prompt");
+      process.exitCode = 2;
+      return;
+    }
+    const disp = opts.disposition;
+    if (disp && !DISPOSITIONS.includes(disp as Disposition)) {
+      console.error(`Invalid --disposition: ${disp} (expected ${DISPOSITIONS.join("|")})`);
+      process.exitCode = 2;
+      return;
+    }
+    const input = {
+      id,
+      title: opts.title,
+      prompt: opts.prompt,
+      ...(disp ? { disposition: disp as Disposition } : {}),
+      ...(opts.repo ? { repo: opts.repo } : {}),
+      ...(opts.branch ? { branch: opts.branch } : {}),
+      ...(opts.label ? { label: opts.label } : {}),
+      ...(opts.automerge ? { automerge: true } : {}),
+      ...(opts.deepReview ? { deepReview: true } : {}),
+      ...(opts.dependsOn
+        ? { dependsOn: opts.dependsOn.split(",").map((s) => s.trim()).filter(Boolean) }
+        : {}),
+    };
+    runTasksAdd({ tasksTomlPath: opts.file, dryRun: opts.dryRun, input });
   });
 
 tasks
