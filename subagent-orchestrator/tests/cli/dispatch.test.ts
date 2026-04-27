@@ -6,7 +6,7 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchTask } from "../../src/cli/dispatch.js";
+import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "../../src/cli/dispatch.js";
 import { openDb, recordDispatch, updateDispatch } from "../../src/store/db.js";
 
 let tmpDir: string;
@@ -149,5 +149,33 @@ describe("runDispatchQuery", () => {
     runDispatchQuery({ dbPath: tmpDb, hasPr: true });
     expect(logged.some((l) => l.includes("alpha"))).toBe(true);
     expect(logged.some((l) => l.includes("beta"))).toBe(false);
+  });
+});
+
+describe("runDispatchSummary", () => {
+  beforeEach(() => {
+    const db = openDb({ path: tmpDb });
+    const a = recordDispatch(db, { taskId: "x", disposition: "local", dispatchedAt: "2026-04-26T08:00:00Z" });
+    updateDispatch(db, a, { status: "merged", ultrareviewUsed: false, costUsdEstimate: 0.10 });
+    const b = recordDispatch(db, { taskId: "y", disposition: "local", dispatchedAt: "2026-04-27T08:00:00Z" });
+    updateDispatch(db, b, { status: "failed", ultrareviewUsed: false, costUsdEstimate: 0.05 });
+    db.close();
+  });
+
+  it("prints buckets when data exists", () => {
+    runDispatchSummary({ dbPath: tmpDb });
+    expect(logged.some((l) => l.includes("2026-04-27"))).toBe(true);
+    expect(logged.some((l) => l.includes("2026-04-26"))).toBe(true);
+    expect(logged.some((l) => l.includes("TOTAL across 2 bucket(s)"))).toBe(true);
+  });
+
+  it("prints '(no dispatches in window)' when filters exclude everything", () => {
+    runDispatchSummary({ dbPath: tmpDb, taskId: "missing" });
+    expect(logged.some((l) => l.includes("no dispatches in window"))).toBe(true);
+  });
+
+  it("supports month bucket", () => {
+    runDispatchSummary({ dbPath: tmpDb, bucket: "month" });
+    expect(logged.some((l) => l.includes("2026-04") && !l.includes("2026-04-2"))).toBe(true);
   });
 });

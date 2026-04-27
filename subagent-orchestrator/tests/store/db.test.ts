@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 
-import { listRecent, openDb, queryDispatches, recordDispatch, updateDispatch } from "../../src/store/db.js";
+import { listRecent, openDb, queryDispatches, recordDispatch, summarizeDispatches, updateDispatch } from "../../src/store/db.js";
 
 describe("orchestrator db", () => {
   let db: Database.Database;
@@ -177,5 +177,83 @@ describe("queryDispatches", () => {
     const rows = queryDispatches(db, { status: [] });
     // Empty array → no status filter applied → all rows
     expect(rows).toHaveLength(4);
+  });
+});
+
+describe("summarizeDispatches", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = openDb({ path: ":memory:" });
+    // Seed: 5 rows across 2 days, mixed statuses + costs
+    const r = (id: string, at: string, status: "merged" | "failed" | "needs-human" | "dispatched" | "ready-for-merge", cost?: number) => {
+      const rid = recordDispatch(db, { taskId: id, disposition: "local", dispatchedAt: at });
+      updateDispatch(db, rid, {
+        status, ultrareviewUsed: false,
+        ...(cost !== undefined ? { costUsdEstimate: cost } : {}),
+      });
+    };
+    r("a1", "2026-04-26T08:00:00Z", "merged", 0.10);
+    r("a2", "2026-04-26T09:00:00Z", "merged", 0.20);
+    r("a3", "2026-04-26T10:00:00Z", "failed", 0.05);
+    r("b1", "2026-04-27T08:00:00Z", "needs-human", 0.15);
+    r("b2", "2026-04-27T09:00:00Z", "dispatched");  // in-flight, no cost
+  });
+
+  it("buckets by day (default), newest first", () => {
+    const out = summarizeDispatches(db);
+    expect(out).toHaveLength(2);
+    expect(out[0]?.bucket).toBe("2026-04-27");
+    expect(out[1]?.bucket).toBe("2026-04-26");
+  });
+
+  it("counts succeeded/failed/needs-human/inFlight per bucket", () => {
+    const out = summarizeDispatches(db);
+    const day26 = out.find((b) => b.bucket === "2026-04-26");
+    const day27 = out.find((b) => b.bucket === "2026-04-27");
+    expect(day26).toMatchObject({ total: 3, succeeded: 2, failed: 1, merged: 2, needsHuman: 0, inFlight: 0 });
+    expect(day27).toMatchObject({ total: 2, succeeded: 0, failed: 0, needsHuman: 1, inFlight: 1 });
+  });
+
+  it("sums costs per bucket and treats null as 0", () => {
+    const out = summarizeDispatches(db);
+    const day26 = out.find((b) => b.bucket === "2026-04-26");
+    const day27 = out.find((b) => b.bucket === "2026-04-27");
+    expect(day26?.totalCostUsd).toBeCloseTo(0.35, 5);
+    expect(day27?.totalCostUsd).toBeCloseTo(0.15, 5);  // dispatched row has no cost
+  });
+
+  it("computes successRate as succeeded/(succeeded+failed), excluding in-flight", () => {
+    const out = summarizeDispatches(db);
+    const day26 = out.find((b) => b.bucket === "2026-04-26");
+    const day27 = out.find((b) => b.bucket === "2026-04-27");
+    expect(day26?.successRate).toBeCloseTo(2 / 3, 5);
+    // day27 has 0 succeeded + 0 failed → null
+    expect(day27?.successRate).toBeNull();
+  });
+
+  it("buckets by hour", () => {
+    const out = summarizeDispatches(db, { bucket: "hour" });
+    expect(out.length).toBeGreaterThanOrEqual(5);
+    expect(out[0]?.bucket).toMatch(/^2026-04-27 09$/);
+  });
+
+  it("buckets by month", () => {
+    const out = summarizeDispatches(db, { bucket: "month" });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.bucket).toBe("2026-04");
+    expect(out[0]?.total).toBe(5);
+  });
+
+  it("applies filters before bucketing", () => {
+    const out = summarizeDispatches(db, { status: "failed" });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.bucket).toBe("2026-04-26");
+    expect(out[0]?.total).toBe(1);
+  });
+
+  it("returns empty when no rows match filters", () => {
+    const out = summarizeDispatches(db, { taskId: "nonexistent" });
+    expect(out).toEqual([]);
   });
 });
