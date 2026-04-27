@@ -6,8 +6,10 @@
 // local), M5 (claude-mention), M6 (ultraplan + autofix), M7 (db).
 
 import { classify, type ClassifyResult } from "./classify.js";
+import { dispatchAutofix } from "./dispatch/autofix.js";
 import { dispatchClaudeMention, parseTargetFromPrompt } from "./dispatch/claude-mention.js";
 import { dispatchLocal } from "./dispatch/local.js";
+import { dispatchUltraplan } from "./dispatch/ultraplan.js";
 import {
   openDb,
   recordDispatch,
@@ -24,8 +26,8 @@ export interface OrchestratorOptions {
   dispatchOverrides?: Partial<{
     local: typeof dispatchLocal;
     "claude-mention": typeof dispatchClaudeMention;
-    // ultraplan + autofix + web require their own option shapes; defer
-    // to the per-disposition tests until those PRs land on main
+    ultraplan: typeof dispatchUltraplan;
+    autofix: typeof dispatchAutofix;
   }>;
   /** Default repo for non-local dispositions when task.repo is empty */
   defaultRepo?: string;
@@ -52,6 +54,8 @@ export async function orchestrateOne(
   const dispatchLocalFn = options.dispatchOverrides?.local ?? dispatchLocal;
   const dispatchClaudeMentionFn =
     options.dispatchOverrides?.["claude-mention"] ?? dispatchClaudeMention;
+  const dispatchUltraplanFn = options.dispatchOverrides?.ultraplan ?? dispatchUltraplan;
+  const dispatchAutofixFn = options.dispatchOverrides?.autofix ?? dispatchAutofix;
 
   // 1. Classify
   const classification = classify(task);
@@ -90,12 +94,33 @@ export async function orchestrateOne(
           result = await dispatchClaudeMentionFn(task, { target, repo });
         }
       }
+    } else if (disposition === "ultraplan") {
+      result = await dispatchUltraplanFn(task);
+    } else if (disposition === "autofix") {
+      const target = parseTargetFromPrompt(task.prompt);
+      if (!target || target.kind !== "pr") {
+        result = {
+          taskId: task.id,
+          status: "failed",
+          ultrareviewUsed: false,
+          error: "autofix requires a PR target — include 'PR #N' in prompt",
+        };
+      } else {
+        result = await dispatchAutofixFn(task, { prNumber: target.prNumber });
+      }
+    } else if (disposition === "web") {
+      result = {
+        taskId: task.id,
+        status: "failed",
+        ultrareviewUsed: false,
+        error: "web dispatcher not yet implemented — use ship.ts via the CLI for now",
+      };
     } else {
       result = {
         taskId: task.id,
         status: "failed",
         ultrareviewUsed: false,
-        error: `Disposition '${disposition}' not yet wired into the main loop (ultraplan+autofix+web are M6+; tracked separately)`,
+        error: `Unknown disposition '${disposition}'`,
       };
     }
   } catch (err) {
