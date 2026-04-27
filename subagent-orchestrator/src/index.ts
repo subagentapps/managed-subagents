@@ -12,6 +12,7 @@
 import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
+import { runDaemon } from "./cli/daemon.js";
 import { runDispatchAll, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
@@ -185,6 +186,46 @@ program
       noComment: opts.comment === false,
       iterationBudgetUsd: opts.budget,
       maxReviews: opts.max,
+    });
+  });
+
+program
+  .command("daemon")
+  .description("Long-running babysit driver — sweeps PRs every N seconds until SIGINT")
+  .option("--repo <owner/name>", "GitHub repo")
+  .option("--author <login>", "Filter PRs by author substring")
+  .option("--include-drafts", "Include draft PRs")
+  .option("--allow-protected", "Allow merging into main/master/etc")
+  .option("--no-comment", "Don't post review comments")
+  .option("--budget <usd>", "Per-iteration review budget", (v) => Number(v), 5)
+  .option("--max <n>", "Max PRs per iteration", (v) => Number(v), 5)
+  .option("--interval <seconds>", "Seconds between iterations", (v) => Number(v), 600)
+  .option("--max-iterations <n>", "Stop after N iterations (0 = forever)", (v) => Number(v), 0)
+  .option("--daily-budget <usd>", "Total spend cap before exit", (v) => Number(v), 50)
+  .action(async (opts: {
+    repo?: string;
+    author?: string;
+    includeDrafts?: boolean;
+    allowProtected?: boolean;
+    /** commander negation */
+    comment?: boolean;
+    budget?: number;
+    max?: number;
+    interval?: number;
+    maxIterations?: number;
+    dailyBudget?: number;
+  }) => {
+    await runDaemon({
+      repo: opts.repo,
+      authorFilter: opts.author,
+      includeDrafts: opts.includeDrafts,
+      allowProtected: opts.allowProtected,
+      noComment: opts.comment === false,
+      iterationBudgetUsd: opts.budget,
+      maxReviews: opts.max,
+      intervalSeconds: opts.interval,
+      maxIterations: opts.maxIterations,
+      dailyBudgetUsd: opts.dailyBudget,
     });
   });
 
