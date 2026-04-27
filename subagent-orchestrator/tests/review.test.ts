@@ -249,4 +249,67 @@ describe("review", () => {
 
     expect(result.verdict).toBe("COMMENT");
   });
+
+  it("parses verdict from markdown-bold + emoji variant (real subagent output)", async () => {
+    const { exec } = mockExec([
+      () => ({ stdout: sampleDiff }),
+      () => ({ stdout: '{"title":"x","isDraft":false}' }),
+      () => ({ stdout: "" }),
+    ]);
+
+    // This is the actual format the orchestrator-reviewer produced in a live test.
+    // Earlier regex required a bare ^VERDICT: line; live subagents wrap it.
+    const liveStyleResult: SdkResultMessage = {
+      type: "result",
+      subtype: "success",
+      result: `## 💬 subagent-orchestrator review
+
+The subagent completed.
+
+---
+
+**Reviewer verdict: ✅ APPROVE**
+
+## Summary
+
+PR looks fine.
+`,
+      total_cost_usd: 0.66,
+      session_id: "live-style",
+    };
+
+    const result = await review(1, {
+      execFileOverride: exec,
+      sdkOverride: mockSdk([liveStyleResult]),
+    });
+
+    expect(result.verdict).toBe("APPROVE");
+  });
+
+  it("parses 'Verdict:' (lowercase) variant", async () => {
+    const { exec } = mockExec([
+      () => ({ stdout: sampleDiff }),
+      () => ({ stdout: '{"title":"x","isDraft":false}' }),
+      () => ({ stdout: "" }),
+    ]);
+
+    const lowerResult: SdkResultMessage = {
+      type: "result",
+      subtype: "success",
+      result: `Verdict: REQUEST_CHANGES
+
+## Summary
+
+Found a critical issue.`,
+      total_cost_usd: 0.30,
+      session_id: "lower",
+    };
+
+    const result = await review(1, {
+      execFileOverride: exec,
+      sdkOverride: mockSdk([lowerResult]),
+    });
+
+    expect(result.verdict).toBe("REQUEST_CHANGES");
+  });
 });
