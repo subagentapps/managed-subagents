@@ -110,6 +110,51 @@ describe("orchestrateOne", () => {
     expect(out.result.error).toMatch(/explicit target/);
   });
 
+  it("dispatches claude-mention when prompt has 'PR #N'", async () => {
+    let calledTarget: { kind: string; prNumber?: number; issueNumber?: number } | null = null;
+    const out = await orchestrateOne(
+      makeTask({
+        id: "mention-pr",
+        title: "Review request",
+        prompt: "@claude please review PR #42 for security issues",
+      }),
+      {
+        db,
+        dispatchOverrides: {
+          "claude-mention": async (task, opts) => {
+            calledTarget = opts.target;
+            return { taskId: task.id, status: "dispatched", ultrareviewUsed: false };
+          },
+        },
+      },
+    );
+    expect(out.classification.disposition).toBe("claude-mention");
+    expect(out.result.status).toBe("dispatched");
+    expect(calledTarget).toEqual({ kind: "pr", prNumber: 42 });
+  });
+
+  it("dispatches claude-mention when prompt has 'issue #N'", async () => {
+    let calledTarget: { kind: string; prNumber?: number; issueNumber?: number } | null = null;
+    const out = await orchestrateOne(
+      makeTask({
+        id: "mention-issue",
+        title: "Triage issue",
+        prompt: "@claude please look at issue #99 and respond",
+      }),
+      {
+        db,
+        dispatchOverrides: {
+          "claude-mention": async (task, opts) => {
+            calledTarget = opts.target;
+            return { taskId: task.id, status: "dispatched", ultrareviewUsed: false };
+          },
+        },
+      },
+    );
+    expect(out.result.status).toBe("dispatched");
+    expect(calledTarget).toEqual({ kind: "issue", issueNumber: 99 });
+  });
+
   it("catches dispatcher exceptions and records failed", async () => {
     const out = await orchestrateOne(
       makeTask({ id: "throw", disposition: "local" }),

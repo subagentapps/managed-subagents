@@ -6,7 +6,7 @@
 // local), M5 (claude-mention), M6 (ultraplan + autofix), M7 (db).
 
 import { classify, type ClassifyResult } from "./classify.js";
-import { dispatchClaudeMention } from "./dispatch/claude-mention.js";
+import { dispatchClaudeMention, parseTargetFromPrompt } from "./dispatch/claude-mention.js";
 import { dispatchLocal } from "./dispatch/local.js";
 import {
   openDb,
@@ -69,9 +69,6 @@ export async function orchestrateOne(
     if (disposition === "local") {
       result = await dispatchLocalFn(task);
     } else if (disposition === "claude-mention") {
-      // Need a target; if task has no PR/issue context, fall back to issue creation
-      // — but v0.1 expects task.repo set and assumes the user pre-created the issue.
-      // Future M5+ will create the issue if missing.
       const repo = task.repo || options.defaultRepo;
       if (!repo) {
         result = {
@@ -81,16 +78,17 @@ export async function orchestrateOne(
           error: "claude-mention requires task.repo or defaultRepo",
         };
       } else {
-        // Without a PR/issue number, dispatch fails fast for v0.1.
-        // Future enhancement: parse task.prompt for #N, or auto-create.
-        result = {
-          taskId: task.id,
-          status: "failed",
-          ultrareviewUsed: false,
-          error: "claude-mention requires explicit target (PR or issue number); auto-create is not yet implemented",
-        };
-        // When implemented:
-        // result = await dispatchClaudeMentionFn(task, { target: { kind: "pr", prNumber }, repo });
+        const target = parseTargetFromPrompt(task.prompt);
+        if (!target) {
+          result = {
+            taskId: task.id,
+            status: "failed",
+            ultrareviewUsed: false,
+            error: "claude-mention requires explicit target — include 'PR #N' or 'issue #N' in prompt",
+          };
+        } else {
+          result = await dispatchClaudeMentionFn(task, { target, repo });
+        }
       }
     } else {
       result = {
@@ -119,9 +117,6 @@ export async function orchestrateOne(
     ultrareviewUsed: result.ultrareviewUsed,
     costUsdEstimate: result.costUsdEstimate ?? null,
   });
-
-  // suppress unused var warning until M5 wires through
-  void dispatchClaudeMentionFn;
 
   return {
     task,
