@@ -68,11 +68,16 @@ dispatch
 
 dispatch
   .command("all")
-  .description("Dispatch every task in tasks.toml sequentially")
+  .description("Dispatch every task in tasks.toml; topo-sorted by dependsOn unless --no-deps")
   .option("-f, --file <path>", "Path to tasks.toml")
   .option("--db <path>", "Override dispatch_log database path")
-  .action(async (opts: { file?: string; db?: string }) => {
-    await runDispatchAll({ tasksTomlPath: opts.file, dbPath: opts.db });
+  .option("--no-deps", "Run in declaration order, ignoring dependsOn")
+  .action(async (opts: { file?: string; db?: string; deps?: boolean }) => {
+    await runDispatchAll({
+      tasksTomlPath: opts.file,
+      dbPath: opts.db,
+      respectDeps: opts.deps !== false,
+    });
   });
 
 dispatch

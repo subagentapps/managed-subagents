@@ -14,6 +14,8 @@ import type { TaskResult } from "../types.js";
 export interface DispatchTaskOptions {
   tasksTomlPath?: string;
   dbPath?: string;
+  /** orchestrateAll: respect dependsOn topo order (default true). */
+  respectDeps?: boolean;
 }
 
 export async function runDispatchTask(
@@ -43,7 +45,10 @@ export async function runDispatchAll(options: DispatchTaskOptions = {}): Promise
     return;
   }
   const db = openDb(options.dbPath ? { path: options.dbPath } : {});
-  const results = await orchestrateAll(tasks, { db });
+  const results = await orchestrateAll(tasks, {
+    db,
+    ...(options.respectDeps !== undefined ? { respectDeps: options.respectDeps } : {}),
+  });
   for (const r of results) printResult(r);
 
   const failed = results.filter((r) => r.result.status === "failed").length;

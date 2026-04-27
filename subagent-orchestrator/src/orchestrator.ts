@@ -11,6 +11,7 @@ import { dispatchClaudeMention, parseTargetFromPrompt } from "./dispatch/claude-
 import { dispatchLocal } from "./dispatch/local.js";
 import { dispatchUltraplan } from "./dispatch/ultraplan.js";
 import { ship } from "./ship.js";
+import { topoSortTasks, TopoSortError } from "./topo.js";
 import {
   openDb,
   recordDispatch,
@@ -33,6 +34,8 @@ export interface OrchestratorOptions {
   }>;
   /** Default repo for non-local dispositions when task.repo is empty */
   defaultRepo?: string;
+  /** orchestrateAll: topo-sort by dependsOn (default true). False = declaration order. */
+  respectDeps?: boolean;
 }
 
 export interface OrchestrateResult {
@@ -154,13 +157,36 @@ export async function orchestrateOne(
   };
 }
 
-/** Sequentially run a list of tasks. v0.1 has no concurrency (M8). */
+/**
+ * Sequentially run a list of tasks. v0.1 has no concurrency (M8).
+ *
+ * Order: topo-sorted by dependsOn (stable Kahn). Pass
+ * options.respectDeps=false to run in declaration order instead.
+ *
+ * If a topo cycle is detected, runs tasks in declaration order and
+ * marks each subsequent failure with a topo-error annotation rather
+ * than refusing to run anything (graceful degradation).
+ */
 export async function orchestrateAll(
   tasks: Task[],
   options: OrchestratorOptions = {},
 ): Promise<OrchestrateResult[]> {
+  let ordered = tasks;
+  if (options.respectDeps !== false) {
+    try {
+      ordered = topoSortTasks(tasks);
+    } catch (err) {
+      if (err instanceof TopoSortError) {
+        // Fall back to declaration order; cycle is the operator's problem to fix.
+        // (validateTasks would have caught and reported it before this point.)
+        ordered = tasks;
+      } else {
+        throw err;
+      }
+    }
+  }
   const results: OrchestrateResult[] = [];
-  for (const task of tasks) {
+  for (const task of ordered) {
     results.push(await orchestrateOne(task, options));
   }
   return results;
