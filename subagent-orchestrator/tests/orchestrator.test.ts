@@ -249,6 +249,74 @@ describe("orchestrateOne", () => {
 });
 
 describe("orchestrateAll", () => {
+  it("topo-sorts by dependsOn before dispatching", async () => {
+    const db = openDb({ path: ":memory:" });
+    const order: string[] = [];
+    const out = await orchestrateAll(
+      [
+        makeTask({ id: "c", disposition: "local", dependsOn: ["a", "b"] }),
+        makeTask({ id: "a", disposition: "local" }),
+        makeTask({ id: "b", disposition: "local", dependsOn: ["a"] }),
+      ],
+      {
+        db,
+        dispatchOverrides: {
+          local: async (task) => {
+            order.push(task.id);
+            return successResult(task.id);
+          },
+        },
+      },
+    );
+    expect(order).toEqual(["a", "b", "c"]);
+    expect(out.map((r) => r.task.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("respectDeps=false keeps declaration order", async () => {
+    const db = openDb({ path: ":memory:" });
+    const order: string[] = [];
+    await orchestrateAll(
+      [
+        makeTask({ id: "c", disposition: "local", dependsOn: ["a", "b"] }),
+        makeTask({ id: "a", disposition: "local" }),
+        makeTask({ id: "b", disposition: "local", dependsOn: ["a"] }),
+      ],
+      {
+        db,
+        respectDeps: false,
+        dispatchOverrides: {
+          local: async (task) => {
+            order.push(task.id);
+            return successResult(task.id);
+          },
+        },
+      },
+    );
+    expect(order).toEqual(["c", "a", "b"]);
+  });
+
+  it("falls back to declaration order on cycle (graceful degradation)", async () => {
+    const db = openDb({ path: ":memory:" });
+    const order: string[] = [];
+    await orchestrateAll(
+      [
+        makeTask({ id: "a", disposition: "local", dependsOn: ["b"] }),
+        makeTask({ id: "b", disposition: "local", dependsOn: ["a"] }),
+      ],
+      {
+        db,
+        dispatchOverrides: {
+          local: async (task) => {
+            order.push(task.id);
+            return successResult(task.id);
+          },
+        },
+      },
+    );
+    // Cycle → fallback to declaration order
+    expect(order).toEqual(["a", "b"]);
+  });
+
   it("runs tasks sequentially and returns results in order", async () => {
     const db = openDb({ path: ":memory:" });
     const tasks = [
