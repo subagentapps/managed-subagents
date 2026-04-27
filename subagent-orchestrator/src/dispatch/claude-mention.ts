@@ -30,6 +30,43 @@ export class ClaudeMentionDispatchError extends Error {
 }
 
 /**
+ * Parse a target reference out of a task prompt.
+ *
+ * Recognized forms:
+ *   - "PR #123" / "pull request 123" → { kind: "pr", prNumber: 123 }
+ *   - "issue #45" / "Issue 45"        → { kind: "issue", issueNumber: 45 }
+ *   - bare "#7" prefers issue (GitHub treats both URL spaces as one anyway,
+ *     but a comment on an issue is the safe default; PR comments via this
+ *     dispatcher should be explicit)
+ *
+ * Returns null if no target can be inferred.
+ */
+export function parseTargetFromPrompt(
+  prompt: string,
+): DispatchClaudeMentionOptions["target"] | null {
+  // Look for "PR #N" or "pull request N"
+  const prMatch =
+    /\b(?:pr|pull[\s-]?request)\s*#?\s*(\d+)\b/i.exec(prompt);
+  if (prMatch?.[1]) {
+    return { kind: "pr", prNumber: parseInt(prMatch[1], 10) };
+  }
+
+  // Look for "issue #N" or "issue N"
+  const issueMatch = /\bissue\s*#?\s*(\d+)\b/i.exec(prompt);
+  if (issueMatch?.[1]) {
+    return { kind: "issue", issueNumber: parseInt(issueMatch[1], 10) };
+  }
+
+  // Bare "#N" — default to issue
+  const bareMatch = /(?:^|\s)#(\d+)\b/.exec(prompt);
+  if (bareMatch?.[1]) {
+    return { kind: "issue", issueNumber: parseInt(bareMatch[1], 10) };
+  }
+
+  return null;
+}
+
+/**
  * Compose the comment body with a @claude mention and the task prompt.
  *
  * Format:
