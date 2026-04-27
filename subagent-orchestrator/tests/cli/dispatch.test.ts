@@ -6,7 +6,7 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "../../src/cli/dispatch.js";
+import { runDispatchAll, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "../../src/cli/dispatch.js";
 import { openDb, recordDispatch, updateDispatch } from "../../src/store/db.js";
 
 let tmpDir: string;
@@ -177,5 +177,32 @@ describe("runDispatchSummary", () => {
   it("supports month bucket", () => {
     runDispatchSummary({ dbPath: tmpDb, bucket: "month" });
     expect(logged.some((l) => l.includes("2026-04") && !l.includes("2026-04-2"))).toBe(true);
+  });
+});
+
+describe("runDispatchPrune", () => {
+  beforeEach(() => {
+    const db = openDb({ path: tmpDb });
+    const a = recordDispatch(db, { taskId: "ancient", disposition: "local", dispatchedAt: "2026-04-01T00:00:00Z" });
+    updateDispatch(db, a, { status: "merged", ultrareviewUsed: false });
+    const b = recordDispatch(db, { taskId: "fresh", disposition: "local", dispatchedAt: "2026-04-27T00:00:00Z" });
+    updateDispatch(db, b, { status: "dispatched", ultrareviewUsed: false });
+    db.close();
+  });
+
+  it("errors when no cutoff supplied", () => {
+    runDispatchPrune({ dbPath: tmpDb });
+    expect(errored.some((l) => l.includes("requires --before"))).toBe(true);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("deletes rows before cutoff", () => {
+    runDispatchPrune({ dbPath: tmpDb, before: "2026-04-15T00:00:00Z" });
+    expect(logged.some((l) => l.includes("deleted 1 row"))).toBe(true);
+  });
+
+  it("dryRun reports without deleting", () => {
+    runDispatchPrune({ dbPath: tmpDb, before: "2026-04-15T00:00:00Z", dryRun: true });
+    expect(logged.some((l) => l.includes("[dry-run]") && l.includes("would delete 1"))).toBe(true);
   });
 });
