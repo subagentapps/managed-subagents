@@ -46,7 +46,16 @@ export interface ReviewResult {
 }
 
 const DEFAULT_MAX_BUDGET_USD = 3;
-const VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES|COMMENT)\b/m;
+// Match VERDICT in any of these forms (real-world subagent variants):
+//   VERDICT: APPROVE
+//   **VERDICT: APPROVE**
+//   **Reviewer verdict: ✅ APPROVE**
+//   Verdict: ❌ REQUEST_CHANGES
+// Look for the keyword (verdict, case-insensitive) then a verdict word
+// somewhere later on the same line. Tolerates emoji, markdown bold, etc.
+// The verdict tokens themselves are matched case-sensitively (uppercase
+// per the subagent spec) — only the leading "verdict" word is fuzzy.
+const VERDICT_RE = /\bverdict\b[^\n]*?\b(APPROVE|REQUEST_CHANGES|COMMENT)\b/im;
 
 /**
  * Review a PR end-to-end.
