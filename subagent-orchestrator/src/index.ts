@@ -14,6 +14,7 @@ import { Command } from "commander";
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
 import { runDispatchAll, runDispatchExport, runDispatchImport, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
+import { runDoctor } from "./cli/doctor.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
@@ -360,6 +361,14 @@ program
       requireChecksPass: opts.requireChecks,
       dbPath: opts.db,
     });
+  });
+
+program
+  .command("doctor")
+  .description("Probe runtime dependencies (gh, db, SDK, subagents) and report readiness")
+  .option("--db <path>", "Override DB path probed")
+  .action(async (opts: { db?: string }) => {
+    await runDoctor({ dbPath: opts.db });
   });
 
 program.parse(process.argv);
