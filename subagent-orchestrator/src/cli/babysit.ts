@@ -10,6 +10,7 @@ export interface BabysitCommandOptions {
   noComment?: boolean;
   iterationBudgetUsd?: number;
   maxReviews?: number;
+  requireChecksPass?: boolean;
 }
 
 export async function runBabysit(options: BabysitCommandOptions = {}): Promise<void> {
@@ -22,6 +23,11 @@ export async function runBabysit(options: BabysitCommandOptions = {}): Promise<v
   }
 
   for (const item of result.items) {
+    if (item.preReviewSkip) {
+      console.log(`  PR #${item.prNumber} ⏸ skipped (${item.preReviewSkip})  — ${item.title}`);
+      if (item.error) console.log(`    error: ${item.error}`);
+      continue;
+    }
     const verdictIcon =
       item.verdict === "APPROVE" ? "✅" :
       item.verdict === "REQUEST_CHANGES" ? "❌" :
