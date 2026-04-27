@@ -12,6 +12,7 @@
 import { Command } from "commander";
 
 import { runDispatchAll, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
+import { runShip } from "./cli/ship.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksList } from "./cli/tasks-list.js";
 
@@ -67,6 +68,29 @@ dispatch
   .option("-n, --limit <n>", "Number of rows", (v) => Number(v), 20)
   .action((opts: { db?: string; limit?: number }) => {
     runDispatchStats({ dbPath: opts.db, limit: opts.limit });
+  });
+
+program
+  .command("ship <task-id>")
+  .description("End-to-end: dispatch task → commit on fresh branch → push → open draft PR")
+  .option("-f, --file <path>", "Path to tasks.toml")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--base <branch>", "Base branch (default 'main')")
+  .option("--branch <name>", "Override branch name")
+  .option("--repo <owner/name>", "GitHub repo (default: cwd's repo)")
+  .option("--no-remote", "Don't push or open PR — local commit only (testing)")
+  .action(async (id: string, opts: {
+    file?: string; db?: string; base?: string; branch?: string;
+    repo?: string; noRemote?: boolean;
+  }) => {
+    await runShip(id, {
+      tasksTomlPath: opts.file,
+      dbPath: opts.db,
+      baseBranch: opts.base,
+      branchName: opts.branch,
+      repo: opts.repo,
+      noRemote: opts.noRemote,
+    });
   });
 
 program.parse(process.argv);
