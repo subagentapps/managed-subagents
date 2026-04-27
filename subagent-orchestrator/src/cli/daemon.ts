@@ -14,6 +14,7 @@ export interface DaemonCommandOptions {
   intervalSeconds?: number;
   maxIterations?: number;
   dailyBudgetUsd?: number;
+  requireChecksPass?: boolean;
 }
 
 export async function runDaemon(options: DaemonCommandOptions = {}): Promise<void> {

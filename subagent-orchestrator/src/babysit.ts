@@ -18,6 +18,7 @@ import { promisify } from "node:util";
 
 import { merge, type MergeResult } from "./merge.js";
 import { review, type ReviewResult } from "./review.js";
+import { fetchPrStatus, type PrStatus } from "./watch/gh.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,6 +43,19 @@ export interface BabysitOptions {
   reviewOverride?: typeof review;
   /** Inject for testing — replaces the actual merge() call. */
   mergeOverride?: typeof merge;
+  /**
+   * If true, fetch PR status before reviewing and skip PRs whose non-skipped
+   * checks haven't all succeeded. Default false (review everything).
+   */
+  requireChecksPass?: boolean;
+  /**
+   * Regex matching check names to ignore when evaluating CI state. Defaults
+   * to /claude-review/i because the auto-review check routinely fails on
+   * usage cap; orchestrator decisions shouldn't gate on it.
+   */
+  checkSkipPattern?: RegExp;
+  /** Inject for testing — replaces fetchPrStatus(). */
+  fetchPrStatusOverride?: typeof fetchPrStatus;
 }
 
 export interface BabysitItem {
@@ -54,6 +68,8 @@ export interface BabysitItem {
   verdict?: ReviewResult["verdict"];
   reviewCostUsd?: number;
   mergeSkipped?: MergeResult["skipped"];
+  /** Set when the PR was skipped before review (e.g. checks pending/failing) */
+  preReviewSkip?: "checks-pending" | "checks-failing" | "checks-fetch-failed";
   error?: string;
 }
 
@@ -75,6 +91,8 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
   const maxReviews = options.maxReviews ?? DEFAULT_MAX_REVIEWS;
   const reviewFn = options.reviewOverride ?? review;
   const mergeFn = options.mergeOverride ?? merge;
+  const fetchPrStatusFn = options.fetchPrStatusOverride ?? fetchPrStatus;
+  const skipPattern = options.checkSkipPattern ?? /claude-review/i;
 
   // 1. List open PRs
   const args = [
@@ -124,6 +142,39 @@ export async function babysit(options: BabysitOptions = {}): Promise<BabysitResu
       reviewed: false,
       merged: false,
     };
+
+    // 1.5. Optional CI gate — skip PRs whose meaningful checks haven't passed
+    if (options.requireChecksPass) {
+      let status: PrStatus;
+      try {
+        status = await fetchPrStatusFn(pr.number, {
+          ...(options.repo ? { repo: options.repo } : {}),
+        });
+      } catch (err) {
+        const e = err as { message?: string };
+        item.preReviewSkip = "checks-fetch-failed";
+        item.error = `fetchPrStatus failed: ${e.message ?? "unknown"}`;
+        items.push(item);
+        continue;
+      }
+      const meaningfulChecks = status.checks.filter((c) => !skipPattern.test(c.name));
+      const anyPending = meaningfulChecks.some(
+        (c) => c.status !== "COMPLETED",
+      );
+      const anyFailed = meaningfulChecks.some(
+        (c) => c.status === "COMPLETED" && c.conclusion !== "SUCCESS" && c.conclusion !== "SKIPPED" && c.conclusion !== "NEUTRAL",
+      );
+      if (anyPending) {
+        item.preReviewSkip = "checks-pending";
+        items.push(item);
+        continue;
+      }
+      if (anyFailed) {
+        item.preReviewSkip = "checks-failing";
+        items.push(item);
+        continue;
+      }
+    }
 
     // 2. Review
     let reviewResult: ReviewResult;

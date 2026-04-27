@@ -161,6 +161,154 @@ describe("babysit", () => {
     expect(reviewMock).toHaveBeenCalledTimes(3);
   });
 
+  it("requireChecksPass: skips a PR with pending non-skipped checks", async () => {
+    const reviewMock = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      number: 1, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+      checks: [
+        { name: "claude-review", status: "COMPLETED", conclusion: "FAILURE" },  // ignored by default
+        { name: "ci/build",      status: "IN_PROGRESS", conclusion: "" },        // pending
+      ],
+      reviewCount: 0, commentCount: 0,
+    });
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn(),
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+    });
+
+    expect(result.items[0]?.preReviewSkip).toBe("checks-pending");
+    expect(reviewMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("requireChecksPass: skips a PR with failing non-skipped checks", async () => {
+    const reviewMock = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      number: 1, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+      checks: [
+        { name: "ci/test", status: "COMPLETED", conclusion: "FAILURE" },
+      ],
+      reviewCount: 0, commentCount: 0,
+    });
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn(),
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+    });
+
+    expect(result.items[0]?.preReviewSkip).toBe("checks-failing");
+    expect(reviewMock).not.toHaveBeenCalled();
+  });
+
+  it("requireChecksPass: ignores claude-review failure (default skip pattern)", async () => {
+    const reviewMock = vi.fn().mockResolvedValue(approve(1));
+    const mergeMock = vi.fn().mockResolvedValue(merged(1));
+    const fetchMock = vi.fn().mockResolvedValue({
+      number: 1, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+      checks: [
+        { name: "claude-review", status: "COMPLETED", conclusion: "FAILURE" },
+      ],
+      reviewCount: 0, commentCount: 0,
+    });
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: mergeMock,
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+    });
+
+    expect(result.items[0]?.merged).toBe(true);
+    expect(reviewMock).toHaveBeenCalledOnce();
+  });
+
+  it("requireChecksPass: proceeds when all meaningful checks succeed", async () => {
+    const reviewMock = vi.fn().mockResolvedValue(approve(1));
+    const fetchMock = vi.fn().mockResolvedValue({
+      number: 1, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+      checks: [
+        { name: "ci/test",  status: "COMPLETED", conclusion: "SUCCESS" },
+        { name: "ci/build", status: "COMPLETED", conclusion: "SUCCESS" },
+      ],
+      reviewCount: 0, commentCount: 0,
+    });
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn().mockResolvedValue(merged(1)),
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+    });
+
+    expect(result.items[0]?.preReviewSkip).toBeUndefined();
+    expect(reviewMock).toHaveBeenCalledOnce();
+  });
+
+  it("requireChecksPass: records fetch failure and skips review", async () => {
+    const reviewMock = vi.fn();
+    const fetchMock = vi.fn().mockRejectedValue(new Error("gh down"));
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn(),
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+    });
+
+    expect(result.items[0]?.preReviewSkip).toBe("checks-fetch-failed");
+    expect(result.items[0]?.error).toMatch(/gh down/);
+    expect(reviewMock).not.toHaveBeenCalled();
+  });
+
+  it("custom checkSkipPattern overrides default", async () => {
+    const reviewMock = vi.fn().mockResolvedValue(approve(1));
+    const fetchMock = vi.fn().mockResolvedValue({
+      number: 1, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+      checks: [
+        { name: "flaky-integration", status: "COMPLETED", conclusion: "FAILURE" },
+      ],
+      reviewCount: 0, commentCount: 0,
+    });
+
+    const result = await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn().mockResolvedValue(merged(1)),
+      fetchPrStatusOverride: fetchMock,
+      requireChecksPass: true,
+      checkSkipPattern: /flaky-integration/i,
+    });
+
+    expect(result.items[0]?.preReviewSkip).toBeUndefined();
+    expect(reviewMock).toHaveBeenCalledOnce();
+  });
+
+  it("requireChecksPass=false (default) reviews everything regardless of CI", async () => {
+    const reviewMock = vi.fn().mockResolvedValue(approve(1));
+    const fetchMock = vi.fn();
+
+    await babysit({
+      execFileOverride: listExec([{ number: 1, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: reviewMock,
+      mergeOverride: vi.fn().mockResolvedValue(merged(1)),
+      fetchPrStatusOverride: fetchMock,
+      // requireChecksPass not set
+    });
+
+    expect(reviewMock).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("records review failures without aborting the sweep", async () => {
     const reviewMock = vi.fn()
       .mockRejectedValueOnce(new Error("review boom"))
