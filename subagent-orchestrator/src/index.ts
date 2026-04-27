@@ -19,6 +19,7 @@ import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
+import { runTasksDeps } from "./cli/tasks-deps.js";
 import { runTasksList } from "./cli/tasks-list.js";
 import { runTasksValidate } from "./cli/tasks-validate.js";
 
@@ -37,6 +38,21 @@ tasks
   .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
   .action((opts: { file?: string }) => {
     runTasksList({ tasksTomlPath: opts.file });
+  });
+
+tasks
+  .command("deps")
+  .description("Render dependsOn graph (ASCII tree or Graphviz DOT)")
+  .option("-f, --file <path>", "Path to tasks.toml")
+  .option("--format <fmt>", "tree | dot (default tree)", "tree")
+  .action((opts: { file?: string; format?: string }) => {
+    const fmt = opts.format;
+    if (fmt && !["tree", "dot"].includes(fmt)) {
+      console.error(`Invalid --format: ${fmt} (expected tree|dot)`);
+      process.exitCode = 2;
+      return;
+    }
+    runTasksDeps({ tasksTomlPath: opts.file, format: fmt as "tree" | "dot" | undefined });
   });
 
 tasks
