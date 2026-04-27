@@ -77,4 +77,4 @@ See [`subagent-orchestrator/CLAUDE.md`](./subagent-orchestrator/CLAUDE.md) for o
 
 ## License
 
-TBD. Currently no LICENSE file at root; safest assumption is "all rights reserved" until one is added.
+[MIT](./LICENSE) — same as upstream `anthropics/skills`, `upstash/context7`, and the rest of the open ecosystem this repo participates in.
