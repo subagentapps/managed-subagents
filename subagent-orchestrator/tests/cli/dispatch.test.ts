@@ -62,20 +62,19 @@ describe("runDispatchTask", () => {
     expect(process.exitCode).toBe(2);
   });
 
-  it("dispatches a found task and writes telemetry (un-wired disposition fails gracefully)", async () => {
+  it("dispatches a found task and writes telemetry (autofix without target fails fast)", async () => {
+    // autofix requires 'PR #N' in prompt; without one, the orchestrator
+    // fails fast without hitting the real SDK — keeps this test hermetic.
     writeFileSync(
       tmpToml,
-      `[[task]]\nid="design-something"\ntitle="Design the system architecture"\nprompt="design a migration"\n`,
+      `[[task]]\nid="fix-build"\ntitle="Fix CI"\nprompt="fix the build"\ndisposition="autofix"\nrepo="owner/repo"\n`,
     );
-    await runDispatchTask("design-something", {
+    await runDispatchTask("fix-build", {
       tasksTomlPath: tmpToml,
       dbPath: tmpDb,
     });
-    // classify → ultraplan; ultraplan is un-wired in the main loop → status='failed'
-    // Should still appear in stats with status=failed.
-    expect(logged.some((l) => l.includes("design-something") && l.includes("ultraplan"))).toBe(true);
+    expect(logged.some((l) => l.includes("fix-build") && l.includes("autofix"))).toBe(true);
     expect(logged.some((l) => l.includes("failed"))).toBe(true);
-    // Failed exit code
     expect(process.exitCode).toBe(1);
   });
 });
@@ -88,17 +87,16 @@ describe("runDispatchAll", () => {
   });
 
   it("processes multiple tasks sequentially", async () => {
-    // Both tasks use dispositions un-wired in the v0.1 main loop, so they
-    // fail-fast without hitting the real SDK or gh CLI. This keeps the
-    // test hermetic and fast.
+    // Both tasks fail-fast without hitting real SDK/gh: 'a' is autofix
+    // without a PR target; 'b' is web (un-wired). Hermetic + quick.
     writeFileSync(
       tmpToml,
       `
 [[task]]
 id="a"
-title="design the architecture"
-prompt="design a migration plan"
-disposition="ultraplan"
+title="fix CI"
+prompt="fix the build"
+disposition="autofix"
 repo="owner/repo"
 
 [[task]]

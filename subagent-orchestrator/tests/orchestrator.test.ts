@@ -93,7 +93,73 @@ describe("orchestrateOne", () => {
     );
     expect(out.classification.disposition).toBe("web");
     expect(out.result.status).toBe("failed");
-    expect(out.result.error).toMatch(/not yet wired/);
+    expect(out.result.error).toMatch(/not yet implemented/);
+  });
+
+  it("dispatches ultraplan via override", async () => {
+    let called = false;
+    const out = await orchestrateOne(
+      makeTask({ id: "plan", disposition: "ultraplan" }),
+      {
+        db,
+        dispatchOverrides: {
+          ultraplan: async (task) => {
+            called = true;
+            return { taskId: task.id, status: "dispatched", ultrareviewUsed: false };
+          },
+        },
+      },
+    );
+    expect(called).toBe(true);
+    expect(out.result.status).toBe("dispatched");
+  });
+
+  it("dispatches autofix when prompt has PR target", async () => {
+    let receivedPr: number | null = null;
+    const out = await orchestrateOne(
+      makeTask({
+        id: "fix",
+        disposition: "autofix",
+        prompt: "fix CI on PR #123",
+      }),
+      {
+        db,
+        dispatchOverrides: {
+          autofix: async (task, opts) => {
+            receivedPr = opts.prNumber;
+            return { taskId: task.id, status: "dispatched", ultrareviewUsed: false };
+          },
+        },
+      },
+    );
+    expect(receivedPr).toBe(123);
+    expect(out.result.status).toBe("dispatched");
+  });
+
+  it("fails autofix without PR target", async () => {
+    const out = await orchestrateOne(
+      makeTask({
+        id: "fix-no-target",
+        disposition: "autofix",
+        prompt: "fix the build",
+      }),
+      { db },
+    );
+    expect(out.result.status).toBe("failed");
+    expect(out.result.error).toMatch(/PR target/);
+  });
+
+  it("fails autofix when target is an issue (not a PR)", async () => {
+    const out = await orchestrateOne(
+      makeTask({
+        id: "fix-issue",
+        disposition: "autofix",
+        prompt: "look at issue #5",
+      }),
+      { db },
+    );
+    expect(out.result.status).toBe("failed");
+    expect(out.result.error).toMatch(/PR target/);
   });
 
   it("returns failed for claude-mention without explicit target", async () => {
