@@ -78,8 +78,13 @@ dispatch
   .description("Dispatch a single task by id")
   .option("-f, --file <path>", "Path to tasks.toml")
   .option("--db <path>", "Override dispatch_log database path")
-  .action(async (id: string, opts: { file?: string; db?: string }) => {
-    await runDispatchTask(id, { tasksTomlPath: opts.file, dbPath: opts.db });
+  .option("--dry-run", "Classify+validate but don't dispatch (no DB writes)")
+  .action(async (id: string, opts: { file?: string; db?: string; dryRun?: boolean }) => {
+    await runDispatchTask(id, {
+      tasksTomlPath: opts.file,
+      dbPath: opts.db,
+      dryRun: opts.dryRun,
+    });
   });
 
 dispatch
@@ -88,11 +93,13 @@ dispatch
   .option("-f, --file <path>", "Path to tasks.toml")
   .option("--db <path>", "Override dispatch_log database path")
   .option("--no-deps", "Run in declaration order, ignoring dependsOn")
-  .action(async (opts: { file?: string; db?: string; deps?: boolean }) => {
+  .option("--dry-run", "Classify+validate every task but don't dispatch (no DB writes)")
+  .action(async (opts: { file?: string; db?: string; deps?: boolean; dryRun?: boolean }) => {
     await runDispatchAll({
       tasksTomlPath: opts.file,
       dbPath: opts.db,
       respectDeps: opts.deps !== false,
+      dryRun: opts.dryRun,
     });
   });
 

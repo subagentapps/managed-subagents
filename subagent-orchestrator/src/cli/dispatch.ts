@@ -4,7 +4,11 @@
 //   subagent-orchestrator dispatch all                 — orchestrateAll over tasks.toml
 //   subagent-orchestrator dispatch stats               — show recent dispatch_log rows
 
+import { classify } from "../classify.js";
+import { parseTargetFromPrompt } from "../dispatch/claude-mention.js";
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
+import { topoSortTasks, TopoSortError } from "../topo.js";
+import { validateTasks } from "../validate.js";
 import { exportDispatches, importDispatches, openDb, pruneDispatches, queryDispatches, summarizeDispatches, type DispatchExportFile, type DispatchLogRow, type ImportDispatchesOptions, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { loadTasks } from "../store/tasks.js";
@@ -16,6 +20,10 @@ export interface DispatchTaskOptions {
   dbPath?: string;
   /** orchestrateAll: respect dependsOn topo order (default true). */
   respectDeps?: boolean;
+  /** Dry-run: classify+validate but don't dispatch. No DB writes. */
+  dryRun?: boolean;
+  /** Limit dry-run to a single task id (used by 'dispatch task --dry-run'). */
+  dryRunTaskId?: string;
 }
 
 export async function runDispatchTask(
@@ -27,6 +35,11 @@ export async function runDispatchTask(
   if (!task) {
     console.error(`No task with id='${taskId}' in ${options.tasksTomlPath ?? "tasks.toml"}`);
     process.exitCode = 2;
+    return;
+  }
+
+  if (options.dryRun) {
+    runDryRun([task], { allTasksForValidation: tasks, respectDeps: options.respectDeps });
     return;
   }
 
@@ -44,6 +57,12 @@ export async function runDispatchAll(options: DispatchTaskOptions = {}): Promise
     console.log("(no tasks defined in tasks.toml)");
     return;
   }
+
+  if (options.dryRun) {
+    runDryRun(tasks, { respectDeps: options.respectDeps });
+    return;
+  }
+
   const db = openDb(options.dbPath ? { path: options.dbPath } : {});
   const results = await orchestrateAll(tasks, {
     db,
@@ -54,6 +73,75 @@ export async function runDispatchAll(options: DispatchTaskOptions = {}): Promise
   const failed = results.filter((r) => r.result.status === "failed").length;
   console.log(`\n${results.length - failed}/${results.length} succeeded`);
   if (failed > 0) process.exitCode = 1;
+}
+
+/**
+ * Print what dispatch would do — classification, dispatch order,
+ * per-task readiness — without firing any dispatcher or touching the DB.
+ *
+ * Prints validate findings first, then a per-task plan line.
+ * Exit code 1 if any task has a blocking issue.
+ */
+function runDryRun(
+  tasksToRun: import("../types.js").Task[],
+  opts: {
+    /** Full task set used for validateTasks (cycles, dup ids). Defaults to tasksToRun. */
+    allTasksForValidation?: import("../types.js").Task[];
+    respectDeps?: boolean;
+  } = {},
+): void {
+  const all = opts.allTasksForValidation ?? tasksToRun;
+  const report = validateTasks(all);
+  for (const f of report.findings) {
+    const where = f.taskId ? `[${f.taskId}]` : "[file]";
+    const icon = f.severity === "error" ? "❌" : f.severity === "warn" ? "⚠ " : "ℹ ";
+    console.log(`${icon} validate ${where} ${f.message}`);
+  }
+  if (report.findings.length > 0) console.log();
+
+  // Dispatch order
+  let ordered = tasksToRun;
+  if (opts.respectDeps !== false) {
+    try {
+      ordered = topoSortTasks(tasksToRun);
+    } catch (err) {
+      if (err instanceof TopoSortError) {
+        console.log(`⚠  topo cycle — falling back to declaration order`);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  let blocking = 0;
+  for (const task of ordered) {
+    const cls = classify(task);
+    const issues: string[] = [];
+
+    if (cls.disposition === "autofix") {
+      const target = parseTargetFromPrompt(task.prompt);
+      if (!target || target.kind !== "pr") issues.push("autofix needs PR #N in prompt");
+    }
+    if (cls.disposition === "claude-mention") {
+      if (!parseTargetFromPrompt(task.prompt)) issues.push("claude-mention needs PR/issue target");
+    }
+    if (cls.disposition !== "local" && !task.repo) {
+      issues.push("non-local disposition needs repo");
+    }
+    if (cls.disposition === "web") {
+      // 'web' routes through ship; ship needs a clean tree at runtime — can't check from here.
+      // No blocking issue, but flag the runtime requirement.
+    }
+
+    if (issues.length > 0) blocking += 1;
+    const status = issues.length === 0 ? "✅ ready" : "❌ blocked";
+    const issueNote = issues.length > 0 ? `  — ${issues.join("; ")}` : "";
+    console.log(
+      `${status}  [${task.id}]  ${cls.disposition} (${cls.confidence.toFixed(2)})${issueNote}`,
+    );
+  }
+  console.log(`\n[dry-run] ${ordered.length} task(s); ${blocking} blocked, ${report.errors} validate-error, ${report.warnings} validate-warn`);
+  if (blocking > 0 || report.errors > 0) process.exitCode = 1;
 }
 
 export function runDispatchStats(options: { dbPath?: string; limit?: number } = {}): void {
