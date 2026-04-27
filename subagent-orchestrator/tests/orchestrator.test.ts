@@ -82,18 +82,28 @@ describe("orchestrateOne", () => {
     expect(out.result.status).toBe("ready-for-merge");
   });
 
-  it("returns failed for un-wired disposition (web)", async () => {
+  it("dispatches web disposition via ship override", async () => {
+    let shipCalled = false;
     const out = await orchestrateOne(
       makeTask({
         id: "feature",
         title: "Implement SSO",
         prompt: "in the cloud, new feature",
       }),
-      { db },
+      {
+        db,
+        dispatchOverrides: {
+          web: async (task) => {
+            shipCalled = true;
+            return { taskId: task.id, status: "dispatched", ultrareviewUsed: false, prNumber: 99 };
+          },
+        },
+      },
     );
     expect(out.classification.disposition).toBe("web");
-    expect(out.result.status).toBe("failed");
-    expect(out.result.error).toMatch(/not yet implemented/);
+    expect(shipCalled).toBe(true);
+    expect(out.result.status).toBe("dispatched");
+    expect(out.result.prNumber).toBe(99);
   });
 
   it("dispatches ultraplan via override", async () => {
