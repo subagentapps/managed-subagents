@@ -20,6 +20,7 @@ import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksList } from "./cli/tasks-list.js";
+import { runTasksValidate } from "./cli/tasks-validate.js";
 
 const program = new Command();
 
@@ -36,6 +37,14 @@ tasks
   .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
   .action((opts: { file?: string }) => {
     runTasksList({ tasksTomlPath: opts.file });
+  });
+
+tasks
+  .command("validate")
+  .description("Cross-validate tasks.toml: duplicate ids, dependsOn refs/cycles, soft warnings")
+  .option("-f, --file <path>", "Path to tasks.toml (default: ../tasks.toml)")
+  .action((opts: { file?: string }) => {
+    runTasksValidate({ tasksTomlPath: opts.file });
   });
 
 tasks
