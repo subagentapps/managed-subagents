@@ -11,6 +11,7 @@
 
 import { Command } from "commander";
 
+import { runBabysit } from "./cli/babysit.js";
 import { runDispatchAll, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
@@ -153,6 +154,37 @@ program
       method: method as "merge" | "squash" | "rebase" | undefined,
       deleteBranch: opts.deleteBranch !== false,
       allowProtected: opts.allowProtected,
+    });
+  });
+
+program
+  .command("babysit")
+  .description("Sweep open PRs: review each, auto-merge approvals (rails honored)")
+  .option("--repo <owner/name>", "GitHub repo (default: cwd's repo)")
+  .option("--author <login>", "Only review PRs whose author login contains this substring")
+  .option("--include-drafts", "Include draft PRs (default: skip)")
+  .option("--allow-protected", "Allow merging into main/master/etc (default: rail blocks)")
+  .option("--no-comment", "Don't post review comments")
+  .option("--budget <usd>", "Max total review spend per iteration", (v) => Number(v), 5)
+  .option("--max <n>", "Max PRs to review per iteration", (v) => Number(v), 5)
+  .action(async (opts: {
+    repo?: string;
+    author?: string;
+    includeDrafts?: boolean;
+    allowProtected?: boolean;
+    /** commander negation */
+    comment?: boolean;
+    budget?: number;
+    max?: number;
+  }) => {
+    await runBabysit({
+      repo: opts.repo,
+      authorFilter: opts.author,
+      includeDrafts: opts.includeDrafts,
+      allowProtected: opts.allowProtected,
+      noComment: opts.comment === false,
+      iterationBudgetUsd: opts.budget,
+      maxReviews: opts.max,
     });
   });
 
