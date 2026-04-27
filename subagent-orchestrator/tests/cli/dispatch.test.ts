@@ -88,7 +88,7 @@ describe("runDispatchAll", () => {
 
   it("processes multiple tasks sequentially", async () => {
     // Both tasks fail-fast without hitting real SDK/gh: 'a' is autofix
-    // without a PR target; 'b' is web (un-wired). Hermetic + quick.
+    // without a PR target; 'b' is claude-mention without a target. Hermetic + quick.
     writeFileSync(
       tmpToml,
       `
@@ -101,9 +101,9 @@ repo="owner/repo"
 
 [[task]]
 id="b"
-title="implement new feature"
-prompt="run remotely in the cloud"
-disposition="web"
+title="say hi"
+prompt="please respond"
+disposition="claude-mention"
 repo="owner/repo"
 `,
     );

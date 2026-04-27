@@ -10,6 +10,7 @@ import { dispatchAutofix } from "./dispatch/autofix.js";
 import { dispatchClaudeMention, parseTargetFromPrompt } from "./dispatch/claude-mention.js";
 import { dispatchLocal } from "./dispatch/local.js";
 import { dispatchUltraplan } from "./dispatch/ultraplan.js";
+import { ship } from "./ship.js";
 import {
   openDb,
   recordDispatch,
@@ -28,6 +29,7 @@ export interface OrchestratorOptions {
     "claude-mention": typeof dispatchClaudeMention;
     ultraplan: typeof dispatchUltraplan;
     autofix: typeof dispatchAutofix;
+    web: typeof ship;
   }>;
   /** Default repo for non-local dispositions when task.repo is empty */
   defaultRepo?: string;
@@ -56,6 +58,7 @@ export async function orchestrateOne(
     options.dispatchOverrides?.["claude-mention"] ?? dispatchClaudeMention;
   const dispatchUltraplanFn = options.dispatchOverrides?.ultraplan ?? dispatchUltraplan;
   const dispatchAutofixFn = options.dispatchOverrides?.autofix ?? dispatchAutofix;
+  const dispatchWebFn = options.dispatchOverrides?.web ?? ship;
 
   // 1. Classify
   const classification = classify(task);
@@ -109,12 +112,12 @@ export async function orchestrateOne(
         result = await dispatchAutofixFn(task, { prNumber: target.prNumber });
       }
     } else if (disposition === "web") {
-      result = {
-        taskId: task.id,
-        status: "failed",
-        ultrareviewUsed: false,
-        error: "web dispatcher not yet implemented — use ship.ts via the CLI for now",
-      };
+      // 'web' = full execute-and-PR via ship.ts (uses local SDK as the
+      // execution engine; equivalent to a Claude Code on the web kickoff
+      // for users without the chrome MCP wired up).
+      result = await dispatchWebFn(task, {
+        ...(options.defaultRepo ? { repo: task.repo || options.defaultRepo } : {}),
+      });
     } else {
       result = {
         taskId: task.id,
