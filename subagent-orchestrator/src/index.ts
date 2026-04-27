@@ -12,6 +12,7 @@
 import { Command } from "commander";
 
 import { runDispatchAll, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
+import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
@@ -118,6 +119,40 @@ program
       repo: opts.repo,
       noComment: opts.comment === false,
       markReadyOnApprove: opts.markReadyOnApprove,
+    });
+  });
+
+program
+  .command("merge <pr-number>")
+  .description("Merge a PR via gh, honoring M8 hard rails (default-deny on protected branches)")
+  .option("--repo <owner/name>", "GitHub repo (default: cwd's repo)")
+  .option("--method <method>", "Merge method: merge | squash | rebase (default 'merge')", "merge")
+  .option("--no-delete-branch", "Keep the head branch after merge")
+  .option("--allow-protected", "Bypass the rail blocking merges to main/master/production/release")
+  .action(async (prArg: string, opts: {
+    repo?: string;
+    method?: string;
+    /** commander negation */
+    deleteBranch?: boolean;
+    allowProtected?: boolean;
+  }) => {
+    const prNumber = parseInt(prArg, 10);
+    if (Number.isNaN(prNumber)) {
+      console.error(`Invalid PR number: ${prArg}`);
+      process.exitCode = 2;
+      return;
+    }
+    const method = opts.method;
+    if (method && !["merge", "squash", "rebase"].includes(method)) {
+      console.error(`Invalid --method: ${method} (expected merge|squash|rebase)`);
+      process.exitCode = 2;
+      return;
+    }
+    await runMerge(prNumber, {
+      repo: opts.repo,
+      method: method as "merge" | "squash" | "rebase" | undefined,
+      deleteBranch: opts.deleteBranch !== false,
+      allowProtected: opts.allowProtected,
     });
   });
 
