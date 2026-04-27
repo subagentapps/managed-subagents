@@ -229,6 +229,7 @@ program
   .option("--budget <usd>", "Max total review spend per iteration", (v) => Number(v), 5)
   .option("--max <n>", "Max PRs to review per iteration", (v) => Number(v), 5)
   .option("--require-checks", "Skip PRs whose meaningful CI checks haven't passed (claude-review ignored)")
+  .option("--db <path>", "Persist each PR sweep into dispatch_log")
   .action(async (opts: {
     repo?: string;
     author?: string;
@@ -239,6 +240,7 @@ program
     budget?: number;
     max?: number;
     requireChecks?: boolean;
+    db?: string;
   }) => {
     await runBabysit({
       repo: opts.repo,
@@ -249,6 +251,7 @@ program
       iterationBudgetUsd: opts.budget,
       maxReviews: opts.max,
       requireChecksPass: opts.requireChecks,
+      dbPath: opts.db,
     });
   });
 
@@ -266,6 +269,7 @@ program
   .option("--max-iterations <n>", "Stop after N iterations (0 = forever)", (v) => Number(v), 0)
   .option("--daily-budget <usd>", "Total spend cap before exit", (v) => Number(v), 50)
   .option("--require-checks", "Skip PRs whose meaningful CI checks haven't passed")
+  .option("--db <path>", "Persist each PR sweep into dispatch_log")
   .action(async (opts: {
     repo?: string;
     author?: string;
@@ -279,6 +283,7 @@ program
     maxIterations?: number;
     dailyBudget?: number;
     requireChecks?: boolean;
+    db?: string;
   }) => {
     await runDaemon({
       repo: opts.repo,
@@ -292,6 +297,7 @@ program
       maxIterations: opts.maxIterations,
       dailyBudgetUsd: opts.dailyBudget,
       requireChecksPass: opts.requireChecks,
+      dbPath: opts.db,
     });
   });
 

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { babysit } from "../src/babysit.js";
 import type { MergeResult } from "../src/merge.js";
 import type { ReviewResult } from "../src/review.js";
+import { listRecent, openDb } from "../src/store/db.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyExec = any;
@@ -326,5 +327,97 @@ describe("babysit", () => {
     expect(result.items).toHaveLength(2);
     expect(result.items[0]?.error).toMatch(/review boom/);
     expect(result.items[1]?.merged).toBe(true);
+  });
+});
+
+describe("babysit telemetry", () => {
+  it("records merged outcome to dispatch_log when db provided", async () => {
+    const db = openDb({ path: ":memory:" });
+    await babysit({
+      execFileOverride: listExec([{ number: 7, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: vi.fn().mockResolvedValue(approve(7, 0.42)),
+      mergeOverride: vi.fn().mockResolvedValue(merged(7)),
+      db,
+    });
+
+    const rows = listRecent(db);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      task_id: "babysit-pr-7",
+      disposition: "babysit-review",
+      status: "merged",
+      pr_number: 7,
+    });
+    expect(rows[0]?.cost_usd_estimate).toBeCloseTo(0.42, 5);
+  });
+
+  it("records REQUEST_CHANGES as needs-human", async () => {
+    const db = openDb({ path: ":memory:" });
+    await babysit({
+      execFileOverride: listExec([{ number: 8, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: vi.fn().mockResolvedValue(requestChanges(8)),
+      mergeOverride: vi.fn(),
+      db,
+    });
+
+    const rows = listRecent(db);
+    expect(rows[0]?.status).toBe("needs-human");
+  });
+
+  it("records APPROVE without merge as ready-for-merge", async () => {
+    const db = openDb({ path: ":memory:" });
+    await babysit({
+      execFileOverride: listExec([{ number: 9, title: "x", isDraft: false, baseRefName: "main", author: { login: "u" } }]),
+      reviewOverride: vi.fn().mockResolvedValue(approve(9)),
+      mergeOverride: vi.fn().mockResolvedValue(railBlocked(9)),
+      db,
+    });
+
+    const rows = listRecent(db);
+    expect(rows[0]?.status).toBe("ready-for-merge");
+  });
+
+  it("records review failure as failed", async () => {
+    const db = openDb({ path: ":memory:" });
+    await babysit({
+      execFileOverride: listExec([{ number: 10, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: vi.fn().mockRejectedValue(new Error("boom")),
+      mergeOverride: vi.fn(),
+      db,
+    });
+
+    const rows = listRecent(db);
+    expect(rows[0]?.status).toBe("failed");
+  });
+
+  it("records pre-review skip as failed", async () => {
+    const db = openDb({ path: ":memory:" });
+    await babysit({
+      execFileOverride: listExec([{ number: 11, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: vi.fn(),
+      mergeOverride: vi.fn(),
+      fetchPrStatusOverride: vi.fn().mockResolvedValue({
+        number: 11, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN",
+        checks: [{ name: "ci/test", status: "COMPLETED", conclusion: "FAILURE" }],
+        reviewCount: 0, commentCount: 0,
+      }),
+      requireChecksPass: true,
+      db,
+    });
+
+    const rows = listRecent(db);
+    expect(rows[0]?.status).toBe("failed");
+  });
+
+  it("records nothing when db is omitted", async () => {
+    const db = openDb({ path: ":memory:" });  // open but DON'T pass to babysit
+    await babysit({
+      execFileOverride: listExec([{ number: 12, title: "x", isDraft: false, baseRefName: "feat/y", author: { login: "u" } }]),
+      reviewOverride: vi.fn().mockResolvedValue(approve(12)),
+      mergeOverride: vi.fn().mockResolvedValue(merged(12)),
+      // no db
+    });
+
+    expect(listRecent(db)).toHaveLength(0);
   });
 });
