@@ -133,3 +133,68 @@ export function listRecent(db: Database.Database, limit = 50): DispatchLogRow[] 
     .prepare(`SELECT * FROM dispatch_log ORDER BY dispatched_at DESC LIMIT ?`)
     .all(limit) as DispatchLogRow[];
 }
+
+export interface QueryDispatchesFilters {
+  /** One or more status values to include (OR'd) */
+  status?: TaskResult["status"] | Array<TaskResult["status"]>;
+  /** Filter by task_id (exact match) */
+  taskId?: string;
+  /** Filter by disposition (exact match) */
+  disposition?: string;
+  /** Only rows dispatched at or after this ISO 8601 timestamp */
+  since?: string;
+  /** Only rows dispatched at or before this ISO 8601 timestamp */
+  until?: string;
+  /** Filter rows that have a non-null PR number */
+  hasPr?: boolean;
+  /** Default 100 */
+  limit?: number;
+}
+
+/**
+ * Filter dispatch_log rows. All filters are AND'd; status accepts an array
+ * which is OR'd internally. Returns newest-first.
+ */
+export function queryDispatches(
+  db: Database.Database,
+  filters: QueryDispatchesFilters = {},
+): DispatchLogRow[] {
+  const where: string[] = [];
+  const vals: unknown[] = [];
+
+  if (filters.status !== undefined) {
+    const statuses = Array.isArray(filters.status) ? filters.status : [filters.status];
+    if (statuses.length > 0) {
+      where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+      vals.push(...statuses);
+    }
+  }
+  if (filters.taskId !== undefined) {
+    where.push(`task_id = ?`);
+    vals.push(filters.taskId);
+  }
+  if (filters.disposition !== undefined) {
+    where.push(`disposition = ?`);
+    vals.push(filters.disposition);
+  }
+  if (filters.since !== undefined) {
+    where.push(`dispatched_at >= ?`);
+    vals.push(filters.since);
+  }
+  if (filters.until !== undefined) {
+    where.push(`dispatched_at <= ?`);
+    vals.push(filters.until);
+  }
+  if (filters.hasPr === true) {
+    where.push(`pr_number IS NOT NULL`);
+  } else if (filters.hasPr === false) {
+    where.push(`pr_number IS NULL`);
+  }
+
+  const limit = filters.limit ?? 100;
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const sql = `SELECT * FROM dispatch_log ${whereClause} ORDER BY dispatched_at DESC LIMIT ?`;
+  vals.push(limit);
+
+  return db.prepare(sql).all(...vals) as DispatchLogRow[];
+}

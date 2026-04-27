@@ -5,9 +5,10 @@
 //   subagent-orchestrator dispatch stats               — show recent dispatch_log rows
 
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
-import { openDb } from "../store/db.js";
+import { openDb, queryDispatches, type DispatchLogRow, type QueryDispatchesFilters } from "../store/db.js";
 import { loadTasks } from "../store/tasks.js";
 import type { OrchestrateResult } from "../orchestrator.js";
+import type { TaskResult } from "../types.js";
 
 export interface DispatchTaskOptions {
   tasksTomlPath?: string;
@@ -79,6 +80,54 @@ export function runDispatchStats(options: { dbPath?: string; limit?: number } = 
     );
   }
 
+  const total = rows.reduce((s, r) => s + (r.cost_usd_estimate ?? 0), 0);
+  console.log(`\nTotal cost across ${rows.length} rows: $${total.toFixed(2)}`);
+}
+
+export interface DispatchQueryOptions {
+  dbPath?: string;
+  status?: string;
+  taskId?: string;
+  disposition?: string;
+  since?: string;
+  until?: string;
+  hasPr?: boolean;
+  limit?: number;
+}
+
+export function runDispatchQuery(options: DispatchQueryOptions = {}): void {
+  const db = openDb(options.dbPath ? { path: options.dbPath } : {});
+  const filters: QueryDispatchesFilters = {};
+  if (options.status) {
+    // Allow comma-separated list, e.g. --status=failed,needs-human
+    const list = options.status.split(",").map((s) => s.trim()).filter(Boolean) as Array<TaskResult["status"]>;
+    filters.status = list.length === 1 ? list[0] : list;
+  }
+  if (options.taskId) filters.taskId = options.taskId;
+  if (options.disposition) filters.disposition = options.disposition;
+  if (options.since) filters.since = options.since;
+  if (options.until) filters.until = options.until;
+  if (options.hasPr !== undefined) filters.hasPr = options.hasPr;
+  if (options.limit !== undefined) filters.limit = options.limit;
+
+  const rows = queryDispatches(db, filters);
+  if (rows.length === 0) {
+    console.log("(no rows match the filters)");
+    return;
+  }
+  printDispatchTable(rows);
+}
+
+function printDispatchTable(rows: DispatchLogRow[]): void {
+  console.log("id   task_id              disposition     status            cost   dispatched_at        pr");
+  console.log("---  -------------------  --------------  ----------------  -----  -------------------  --");
+  for (const r of rows) {
+    const cost = r.cost_usd_estimate != null ? `$${r.cost_usd_estimate.toFixed(2)}` : "—";
+    const pr = r.pr_url ? r.pr_url.replace("https://github.com/", "") : "";
+    console.log(
+      `${String(r.id).padEnd(3)}  ${r.task_id.padEnd(19)}  ${r.disposition.padEnd(14)}  ${r.status.padEnd(16)}  ${cost.padEnd(5)}  ${r.dispatched_at.slice(0, 19)}  ${pr}`,
+    );
+  }
   const total = rows.reduce((s, r) => s + (r.cost_usd_estimate ?? 0), 0);
   console.log(`\nTotal cost across ${rows.length} rows: $${total.toFixed(2)}`);
 }

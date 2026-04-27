@@ -6,7 +6,8 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runDispatchAll, runDispatchStats, runDispatchTask } from "../../src/cli/dispatch.js";
+import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchTask } from "../../src/cli/dispatch.js";
+import { openDb, recordDispatch, updateDispatch } from "../../src/store/db.js";
 
 let tmpDir: string;
 let tmpToml: string;
@@ -113,5 +114,40 @@ repo="owner/repo"
     expect(logged.some((l) => l.includes("[b]"))).toBe(true);
     // Summary line
     expect(logged.some((l) => /\d+\/\d+ succeeded/.test(l))).toBe(true);
+  });
+});
+
+describe("runDispatchQuery", () => {
+  beforeEach(() => {
+    // Seed the tmpDb with rows
+    const db = openDb({ path: tmpDb });
+    const a = recordDispatch(db, { taskId: "alpha", disposition: "local", dispatchedAt: "2026-04-26T08:00:00Z" });
+    updateDispatch(db, a, { status: "merged", prUrl: "https://github.com/o/r/pull/1", prNumber: 1, ultrareviewUsed: false, costUsdEstimate: 0.10 });
+    const b = recordDispatch(db, { taskId: "beta", disposition: "ultraplan", dispatchedAt: "2026-04-27T08:00:00Z" });
+    updateDispatch(db, b, { status: "failed", ultrareviewUsed: false });
+    db.close();
+  });
+
+  it("prints rows when filters match", () => {
+    runDispatchQuery({ dbPath: tmpDb, status: "failed" });
+    expect(logged.some((l) => l.includes("beta") && l.includes("failed"))).toBe(true);
+    expect(logged.some((l) => l.includes("alpha"))).toBe(false);
+  });
+
+  it("prints '(no rows match the filters)' when empty", () => {
+    runDispatchQuery({ dbPath: tmpDb, taskId: "nonexistent" });
+    expect(logged.some((l) => l.includes("no rows match the filters"))).toBe(true);
+  });
+
+  it("supports comma-separated status list", () => {
+    runDispatchQuery({ dbPath: tmpDb, status: "merged,failed" });
+    expect(logged.some((l) => l.includes("alpha"))).toBe(true);
+    expect(logged.some((l) => l.includes("beta"))).toBe(true);
+  });
+
+  it("filters by hasPr=true", () => {
+    runDispatchQuery({ dbPath: tmpDb, hasPr: true });
+    expect(logged.some((l) => l.includes("alpha"))).toBe(true);
+    expect(logged.some((l) => l.includes("beta"))).toBe(false);
   });
 });
