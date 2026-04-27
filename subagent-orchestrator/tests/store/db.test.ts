@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 
-import { listRecent, openDb, recordDispatch, updateDispatch } from "../../src/store/db.js";
+import { listRecent, openDb, queryDispatches, recordDispatch, updateDispatch } from "../../src/store/db.js";
 
 describe("orchestrator db", () => {
   let db: Database.Database;
@@ -88,5 +88,94 @@ describe("orchestrator db", () => {
       // @ts-expect-error: deliberately testing invalid value
       updateDispatch(db, id, { status: "bogus-status" }),
     ).toThrow();
+  });
+});
+
+describe("queryDispatches", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = openDb({ path: ":memory:" });
+    // Seed: 4 rows across statuses, dispositions, times, and PR-ness
+    const a = recordDispatch(db, { taskId: "task-a", disposition: "local", dispatchedAt: "2026-04-25T10:00:00Z" });
+    updateDispatch(db, a, { status: "merged", prUrl: "https://github.com/o/r/pull/1", prNumber: 1, ultrareviewUsed: false });
+    const b = recordDispatch(db, { taskId: "task-b", disposition: "ultraplan", dispatchedAt: "2026-04-26T10:00:00Z" });
+    updateDispatch(db, b, { status: "failed", ultrareviewUsed: false });
+    const c = recordDispatch(db, { taskId: "task-a", disposition: "local", dispatchedAt: "2026-04-27T10:00:00Z" });
+    updateDispatch(db, c, { status: "dispatched", ultrareviewUsed: false });
+    const d = recordDispatch(db, { taskId: "task-c", disposition: "autofix", dispatchedAt: "2026-04-27T11:00:00Z" });
+    updateDispatch(db, d, { status: "needs-human", prUrl: "https://github.com/o/r/pull/2", prNumber: 2, ultrareviewUsed: false });
+  });
+
+  it("returns all rows newest-first when no filters", () => {
+    const rows = queryDispatches(db);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.task_id).toBe("task-c");
+    expect(rows[3]?.task_id).toBe("task-a");
+  });
+
+  it("filters by single status", () => {
+    const rows = queryDispatches(db, { status: "failed" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.task_id).toBe("task-b");
+  });
+
+  it("filters by status array (OR semantics)", () => {
+    const rows = queryDispatches(db, { status: ["failed", "needs-human"] });
+    expect(rows.map((r) => r.task_id).sort()).toEqual(["task-b", "task-c"]);
+  });
+
+  it("filters by taskId", () => {
+    const rows = queryDispatches(db, { taskId: "task-a" });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.task_id === "task-a")).toBe(true);
+  });
+
+  it("filters by disposition", () => {
+    const rows = queryDispatches(db, { disposition: "local" });
+    expect(rows).toHaveLength(2);
+  });
+
+  it("filters by since timestamp", () => {
+    const rows = queryDispatches(db, { since: "2026-04-27T00:00:00Z" });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.dispatched_at >= "2026-04-27")).toBe(true);
+  });
+
+  it("filters by until timestamp", () => {
+    const rows = queryDispatches(db, { until: "2026-04-26T23:59:59Z" });
+    expect(rows).toHaveLength(2);
+  });
+
+  it("filters by hasPr=true", () => {
+    const rows = queryDispatches(db, { hasPr: true });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.pr_number !== null)).toBe(true);
+  });
+
+  it("filters by hasPr=false", () => {
+    const rows = queryDispatches(db, { hasPr: false });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.pr_number === null)).toBe(true);
+  });
+
+  it("respects limit", () => {
+    const rows = queryDispatches(db, { limit: 2 });
+    expect(rows).toHaveLength(2);
+  });
+
+  it("ANDs multiple filters together", () => {
+    const rows = queryDispatches(db, {
+      taskId: "task-a",
+      since: "2026-04-26T00:00:00Z",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.dispatched_at).toBe("2026-04-27T10:00:00Z");
+  });
+
+  it("returns empty when status array is empty", () => {
+    const rows = queryDispatches(db, { status: [] });
+    // Empty array → no status filter applied → all rows
+    expect(rows).toHaveLength(4);
   });
 });

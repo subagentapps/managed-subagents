@@ -13,7 +13,7 @@ import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
-import { runDispatchAll, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
+import { runDispatchAll, runDispatchQuery, runDispatchStats, runDispatchTask } from "./cli/dispatch.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
@@ -72,6 +72,38 @@ dispatch
   .option("-n, --limit <n>", "Number of rows", (v) => Number(v), 20)
   .action((opts: { db?: string; limit?: number }) => {
     runDispatchStats({ dbPath: opts.db, limit: opts.limit });
+  });
+
+dispatch
+  .command("query")
+  .description("Filter dispatch_log rows (status, task, disposition, time range, has-pr)")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("--status <list>", "Comma-separated statuses, e.g. failed,needs-human")
+  .option("--task <id>", "Exact task_id match")
+  .option("--disposition <name>", "Exact disposition match (local, ultraplan, ...)")
+  .option("--since <iso>", "ISO 8601 timestamp; only rows dispatched at/after")
+  .option("--until <iso>", "ISO 8601 timestamp; only rows dispatched at/before")
+  .option("--has-pr", "Only rows with a PR number")
+  .option("--no-pr", "Only rows WITHOUT a PR number")
+  .option("-n, --limit <n>", "Max rows (default 100)", (v) => Number(v), 100)
+  .action((opts: {
+    db?: string; status?: string; task?: string; disposition?: string;
+    since?: string; until?: string;
+    /** commander negation: --no-pr sets pr=false */
+    pr?: boolean; hasPr?: boolean;
+    limit?: number;
+  }) => {
+    const hasPrFlag = opts.hasPr === true ? true : opts.pr === false ? false : undefined;
+    runDispatchQuery({
+      dbPath: opts.db,
+      status: opts.status,
+      taskId: opts.task,
+      disposition: opts.disposition,
+      since: opts.since,
+      until: opts.until,
+      ...(hasPrFlag !== undefined ? { hasPr: hasPrFlag } : {}),
+      limit: opts.limit,
+    });
   });
 
 program
