@@ -81,7 +81,9 @@ program
   .option("--no-remote", "Don't push or open PR — local commit only (testing)")
   .action(async (id: string, opts: {
     file?: string; db?: string; base?: string; branch?: string;
-    repo?: string; noRemote?: boolean;
+    repo?: string;
+    /** commander negation: --no-remote sets remote=false; default true */
+    remote?: boolean;
   }) => {
     await runShip(id, {
       tasksTomlPath: opts.file,
@@ -89,7 +91,7 @@ program
       baseBranch: opts.base,
       branchName: opts.branch,
       repo: opts.repo,
-      noRemote: opts.noRemote,
+      noRemote: opts.remote === false,
     });
   });
 
