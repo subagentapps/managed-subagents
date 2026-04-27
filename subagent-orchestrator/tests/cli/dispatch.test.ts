@@ -206,3 +206,59 @@ describe("runDispatchPrune", () => {
     expect(logged.some((l) => l.includes("[dry-run]") && l.includes("would delete 1"))).toBe(true);
   });
 });
+
+describe("runDispatchTask --dry-run", () => {
+  it("reports ready and does not write to DB", async () => {
+    writeFileSync(
+      tmpToml,
+      `[[task]]\nid="probe"\ntitle="Read CHANGELOG"\nprompt="read-only inspect the changelog"\n`,
+    );
+    await runDispatchTask("probe", { tasksTomlPath: tmpToml, dbPath: tmpDb, dryRun: true });
+    expect(logged.some((l) => l.includes("✅ ready") && l.includes("[probe]") && l.includes("local"))).toBe(true);
+    // No db file should have been touched (no orchestrator output line)
+    expect(logged.find((l) => l.startsWith("[probe]") && l.includes("→"))).toBeUndefined();
+  });
+
+  it("reports blocked when autofix lacks PR target", async () => {
+    writeFileSync(
+      tmpToml,
+      `[[task]]\nid="fix"\ntitle="Fix CI"\nprompt="fix the build"\ndisposition="autofix"\nrepo="o/r"\n`,
+    );
+    await runDispatchTask("fix", { tasksTomlPath: tmpToml, dbPath: tmpDb, dryRun: true });
+    expect(logged.some((l) => l.includes("❌ blocked") && l.includes("PR #N"))).toBe(true);
+    expect(process.exitCode).toBe(1);
+  });
+});
+
+describe("runDispatchAll --dry-run", () => {
+  it("prints validate findings then per-task plan; doesn't dispatch", async () => {
+    writeFileSync(
+      tmpToml,
+      `
+[[task]]
+id="a"
+title="Read"
+prompt="read-only inspect"
+
+[[task]]
+id="b"
+title="Fix"
+prompt="fix the build"
+disposition="autofix"
+repo="o/r"
+
+[[task]]
+id="c"
+title="Plan"
+prompt="design migration plan"
+dependsOn=["a"]
+`,
+    );
+    await runDispatchAll({ tasksTomlPath: tmpToml, dbPath: tmpDb, dryRun: true });
+    // Expect both ready and blocked entries, plus the trailer
+    expect(logged.some((l) => l.includes("✅ ready") && l.includes("[a]"))).toBe(true);
+    expect(logged.some((l) => l.includes("❌ blocked") && l.includes("[b]"))).toBe(true);
+    expect(logged.some((l) => l.includes("[dry-run]") && l.includes("3 task"))).toBe(true);
+    expect(process.exitCode).toBe(1);  // because 'b' is blocked
+  });
+});
