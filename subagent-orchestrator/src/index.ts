@@ -23,6 +23,7 @@ import { runTasksRemove } from "./cli/tasks-remove.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksDeps } from "./cli/tasks-deps.js";
 import { runTasksList } from "./cli/tasks-list.js";
+import { runTasksShow } from "./cli/tasks-show.js";
 import { runTasksValidate } from "./cli/tasks-validate.js";
 import type { Disposition } from "./types.js";
 import { DISPOSITIONS } from "./types.js";
@@ -90,6 +91,21 @@ tasks
         : {}),
     };
     runTasksAdd({ tasksTomlPath: opts.file, dryRun: opts.dryRun, input });
+  });
+
+tasks
+  .command("show <id>")
+  .description("Show full detail for one task: fields, classification, validation, recent dispatches")
+  .option("-f, --file <path>", "Path to tasks.toml")
+  .option("--db <path>", "Override dispatch_log database path")
+  .option("-n, --recent-limit <n>", "Max recent dispatches to show", (v) => Number(v), 5)
+  .action((id: string, opts: { file?: string; db?: string; recentLimit?: number }) => {
+    runTasksShow({
+      tasksTomlPath: opts.file,
+      id,
+      dbPath: opts.db,
+      recentLimit: opts.recentLimit,
+    });
   });
 
 tasks
