@@ -165,3 +165,35 @@ PR #81 robots-sitemap $0.33
 PR #82 jsonld $0.28
 PR #83 install-section $0.67
 Total batch dispatches: ~$1.65 (excluding the $1.63 wasted on the heuristic-bug victims)
+
+---
+
+## managedsubagents-web — batch 3 deploy (assets + changelog)
+
+- **Timestamp (UTC):** 2026-04-28T13:13:00Z
+- **Worker name:** managedsubagents-web
+- **Version ID:** e4dcd6c8-8b0b-406f-ac55-ff62e40985f1
+- **Trigger:** missing assets + changelog (PRs #87 og-image, #88 favicon, #89 changelog) — does NOT include #86 because that was orchestrator-only
+
+### Highlights
+
+- Real `/og-image.png` exists (1200×630, 14kB, phosphor-green ASCII art) — social unfurlers now have an image
+- Proper favicon set: 16/32 desktop + 180×180 apple-touch-icon, replacing the inline data-URI `>` SVG
+- New in-page Changelog section between Install and SelfRef listing the 6 most recent meaningful merged PRs
+
+### Verification
+
+- `/og-image.png` → 200, 1200×630 PNG, 14kB (under 60kB target)
+- `/favicon-16.png`, `/favicon-32.png`, `/apple-touch-icon.png` → all 200
+- HTML now contains the full `<link>` set instead of inline data-URI
+- Changelog text present in JS bundle (rendered client-side by React)
+- Bundle: `index.html` 2.51kB · CSS 10.60kB (gzip 2.64kB) · JS 152.63kB (gzip 49.23kB)
+  - JS grew by 1.59kB / CSS by 1.49kB vs prior deploy `c1a098cf`, proportional to the added Changelog section
+
+### Cost ledger (this batch)
+
+PR #86 fix-readyformerge $0.66 (orchestrator-only, not deployed)
+PR #87 og-image $0.43
+PR #88 favicon $0.38
+PR #89 changelog $0.63
+Total batch dispatches: $2.10 (all four landed first try, no waste — heuristic fix from morning paid off)
