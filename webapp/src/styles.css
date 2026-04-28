@@ -1,46 +1,52 @@
-:root {
-  --bg: #0b0d10;
-  --bg-elev: #14181d;
-  --fg: #e8ecf1;
-  --fg-muted: #9aa3ad;
-  --accent: #7c9cff;
-  --accent-strong: #5b7bff;
-  --border: #232932;
-  --max-w: 1080px;
-}
-
-* {
+*, *::before, *::after {
   box-sizing: border-box;
-}
-
-html,
-body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
-  font-size: 16px;
-  line-height: 1.55;
+}
+
+html {
+  background: #000;
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: ui-monospace, "SF Mono", "Menlo", "Cascadia Mono", monospace;
+  font-size: 15px;          /* iPhone-readable base */
+  line-height: 1.5;
+  background: #000;
+  color: #d4d4d4;
+  min-height: 100dvh;       /* dynamic viewport; respects URL bar */
+  overflow-x: hidden;       /* hard guard against horizontal scroll */
+  /* iOS safe-area inset honored via padding on .page wrapper */
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+button, a {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
 }
 
 a {
-  color: var(--accent);
-  text-decoration: none;
+  color: #00ff5f;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-a:hover {
-  color: var(--accent-strong);
+a:focus-visible, button:focus-visible {
+  outline: 2px solid #00ff5f;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
