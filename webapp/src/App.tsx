@@ -1,3 +1,4 @@
+import { Changelog } from "./sections/Changelog";
 import { Footer } from "./sections/Footer";
 import { Hero } from "./sections/Hero";
 import { Install } from "./sections/Install";
@@ -11,6 +12,7 @@ export function App() {
       <Hero />
       <Stack />
       <Install />
+      <Changelog />
       <SelfRef />
       <Footer />
     </main>
