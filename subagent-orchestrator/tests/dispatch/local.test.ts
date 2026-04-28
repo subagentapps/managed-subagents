@@ -157,6 +157,63 @@ describe("dispatchLocal", () => {
     expect((observedOptions as { permissionMode: string }).permissionMode).toBe("plan");
   });
 
+  it("plan-mode with no Edit/Write tool_use fails (regression: dispatch_log rows #20, #21)", async () => {
+    // Edit-intent title would normally route to acceptEdits, but force plan
+    // mode by giving the prompt only investigation language. Then construct
+    // an assistant message with NO Edit/Write/MultiEdit tool_use blocks —
+    // simulating the SDK exiting cleanly without mutating the tree.
+    const result = await dispatchLocal(
+      makeTask({
+        id: "plan-noop",
+        title: "Investigate slow query",
+        prompt: "read-only inspection of the indexes",
+      }),
+      {
+        sdkOverride: mockQuery([
+          {
+            type: "assistant",
+            message: {
+              content: [
+                { type: "text", text: "Here is my plan..." },
+                { type: "tool_use", name: "Read", input: { file_path: "/tmp/x" } },
+              ],
+            },
+          },
+          successResult,
+        ]),
+      },
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe(
+      "plan-mode produced no edits — heuristic likely classified this as read-only by mistake",
+    );
+    expect(result.costUsdEstimate).toBe(0.05);
+  });
+
+  it("plan-mode WITH an Edit tool_use still succeeds", async () => {
+    const result = await dispatchLocal(
+      makeTask({
+        id: "plan-edited",
+        title: "Investigate slow query",
+        prompt: "read-only inspection",
+      }),
+      {
+        sdkOverride: mockQuery([
+          {
+            type: "assistant",
+            message: {
+              content: [
+                { type: "tool_use", name: "Edit", input: {} },
+              ],
+            },
+          },
+          successResult,
+        ]),
+      },
+    );
+    expect(result.status).toBe("ready-for-merge");
+  });
+
   it("uses cwd override when provided", async () => {
     let observedOptions: unknown = null;
     await dispatchLocal(makeTask({ id: "cwd" }), {

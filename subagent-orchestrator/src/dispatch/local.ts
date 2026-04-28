@@ -111,6 +111,7 @@ export async function dispatchLocal(
   const { permissionMode, allowedTools } = resolvePermissionShape(task);
 
   let lastResult: SdkResultMessage | null = null;
+  let sawEditToolUse = false;
   const abortController = new AbortController();
 
   try {
@@ -124,6 +125,9 @@ export async function dispatchLocal(
         abortSignal: abortController.signal,
       },
     })) {
+      if (message.type === "assistant" && !sawEditToolUse) {
+        sawEditToolUse = messageHasEditToolUse(message);
+      }
       if (message.type === "result") {
         lastResult = message;
         const cost = message.total_cost_usd ?? 0;
@@ -167,12 +171,54 @@ export async function dispatchLocal(
     };
   }
 
+  // Plan-mode no-op guard: if the heuristic routed this task into plan mode
+  // but no Edit/Write/MultiEdit tool_use was observed, the SDK could not have
+  // mutated the working tree — yet we'd otherwise return ready-for-merge.
+  // Production rows #20 and #21 in dispatch_log silently no-op'd this way.
+  // Genuine read-only tasks won't hit this branch in practice because the
+  // edit-intent override sends them to acceptEdits; if a true read-only task
+  // does land in plan mode, callers can short-circuit before dispatch.
+  if (permissionMode === "plan" && !sawEditToolUse) {
+    return {
+      taskId: task.id,
+      status: "failed",
+      ultrareviewUsed: false,
+      costUsdEstimate: lastResult.total_cost_usd,
+      error:
+        "plan-mode produced no edits — heuristic likely classified this as read-only by mistake",
+    };
+  }
+
   return {
     taskId: task.id,
     status: "ready-for-merge",
     ultrareviewUsed: false,
     costUsdEstimate: lastResult.total_cost_usd,
   };
+}
+
+/**
+ * Inspect an SDK assistant message for any tool_use block whose name is
+ * Edit, Write, or MultiEdit. The SDK shape is `{ message: { content: [...] } }`
+ * with each content block tagged by `type`. We defensively narrow because
+ * the structural type here uses `[key: string]: unknown`.
+ */
+function messageHasEditToolUse(message: { [key: string]: unknown }): boolean {
+  const inner = (message["message"] as { content?: unknown } | undefined)?.content;
+  if (!Array.isArray(inner)) return false;
+  for (const block of inner) {
+    if (
+      block !== null &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "tool_use"
+    ) {
+      const name = (block as { name?: unknown }).name;
+      if (typeof name === "string" && /^(Edit|Write|MultiEdit)$/.test(name)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
