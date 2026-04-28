@@ -36,52 +36,81 @@
 # label       = "orchestrator"
 
 [[task]]
-id = "cf-research-stack"
-title = "Research Cloudflare deploy stack via llms.txt crawl"
-prompt = "Crawl https://developers.cloudflare.com/llms.txt and the index entries for Workers, Pages, DNS (Custom Domains), Workers Custom Domains, Workers Builds, and Wrangler. Pull the relevant *.md children and produce docs/cloudflare-stack-decision.md (~150 lines) recommending Workers Static Assets vs Pages for a single-page React/Vite landing site bound to managedsubagents.com under account e6294e3ea89f8207af387d459824aaae. Include: 1) chosen runtime + 2-line rationale, 2) required Cloudflare MCP scopes, 3) wrangler.toml skeleton, 4) the exact API/CLI sequence to add a Custom Domain, 5) cost ceiling note. Read-only research, no deploy."
-disposition = "local"
-label = "cloudflare-launch"
-
-[[task]]
-id = "cf-scaffold-localhost"
-title = "Scaffold local webapp skeleton (Vite + React + Workers Static Assets)"
-prompt = "Per docs/cloudflare-stack-decision.md (cf-research-stack output), create webapp/ directory at repo root with: package.json, tsconfig.json, vite.config.ts, wrangler.toml (account_id=e6294e3ea89f8207af387d459824aaae, name=managedsubagents-web), src/main.tsx + src/App.tsx (placeholder hello), index.html. 'npm install && npm run dev' must serve a localhost page. 'npx wrangler dev' must serve the same Worker locally. Add webapp/ to repo CLAUDE.md as a sibling project. Open a draft PR."
+id = "wd-1-viewport"
+title = "Webapp redesign Task 1: viewport meta + global resets"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 1 EXACTLY as written (steps 1-4). Modify webapp/index.html and webapp/src/styles.css. Commit with the exact commit message from step 4. Open a draft PR."
 disposition = "web"
 repo = "subagentapps/managed-subagents"
-label = "cloudflare-launch"
-depends_on = ["cf-research-stack"]
+label = "webapp-redesign"
 
 [[task]]
-id = "cf-build-landing"
-title = "Build the managedsubagents.com landing page UI"
-prompt = "Inside webapp/ (created by cf-scaffold-localhost), replace the placeholder App with a real landing page for managedsubagents.com: hero ('Autonomous PR orchestration for Claude Code'), three feature cards (ship/review/merge, telemetry, hard rails), CTA pointing at github.com/subagentapps/managed-subagents, footer. Single-page, no router, plain CSS modules — no Tailwind / no UI library / no fonts beyond system stack. Lighthouse perf > 95 in local dev. Open a draft PR."
+id = "wd-2-vitest"
+title = "Webapp redesign Task 2: vitest + BUILD_META"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 2 EXACTLY as written (steps 1-8). Adds vitest devDeps + creates webapp/src/data/build-meta.ts and its test. The test must FAIL before the source is written (verify in step 5), then PASS (step 7). Commit per step 8. Open a draft PR."
 disposition = "web"
 repo = "subagentapps/managed-subagents"
-label = "cloudflare-launch"
-depends_on = ["cf-scaffold-localhost"]
+label = "webapp-redesign"
+depends_on = ["wd-1-viewport"]
 
 [[task]]
-id = "cf-mcp-handshake"
-title = "Verify connected Cloudflare MCP and document scopes"
-prompt = "Probe the connected Cloudflare MCP (mcp__cloudflare__*) tools. List available tool names. Run a read-only call to enumerate zones in account e6294e3ea89f8207af387d459824aaae and confirm 'managedsubagents.com' appears (or note its status). Produce docs/cloudflare-mcp-handshake.md with: tool inventory, exact zone-list payload, the OAuth scopes the MCP currently has, and gap analysis (any scope needed for Workers deploy + Custom Domain bind that we don't yet have). No writes."
-disposition = "local"
-label = "cloudflare-launch"
-depends_on = ["cf-research-stack"]
-
-[[task]]
-id = "cf-deploy-worker"
-title = "Deploy webapp Worker to Cloudflare under account e6294e3ea89f8207af387d459824aaae"
-prompt = "After cf-build-landing is merged, run 'wrangler deploy' from webapp/ targeting account_id=e6294e3ea89f8207af387d459824aaae. Worker name=managedsubagents-web. Verify the workers.dev preview URL (https://managedsubagents-web.<sub>.workers.dev) returns 200 and serves the landing page. Capture deployment id, version id, and preview URL into docs/cloudflare-deploy-record.md. STOP before binding the production domain — that's cf-bind-domain. Open a PR with the deploy record committed."
+id = "wd-3-hero"
+title = "Webapp redesign Task 3: brutalist terminal Hero section"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 3 EXACTLY as written (steps 1-6). TDD: failing test first (step 1-2), then CSS + tsx (step 3-4), verify pass (step 5), commit (step 6). Open a draft PR."
 disposition = "web"
 repo = "subagentapps/managed-subagents"
-label = "cloudflare-launch"
-depends_on = ["cf-build-landing", "cf-mcp-handshake"]
+label = "webapp-redesign"
+depends_on = ["wd-2-vitest"]
 
 [[task]]
-id = "cf-bind-domain"
-title = "Bind managedsubagents.com Custom Domain to Worker via Cloudflare MCP"
-prompt = "Using the connected Cloudflare MCP (per cf-mcp-handshake), bind managedsubagents.com (zone in account e6294e3ea89f8207af387d459824aaae, dashboard URL https://dash.cloudflare.com/e6294e3ea89f8207af387d459824aaae/managedsubagents.com) as a Custom Domain on the managedsubagents-web Worker. Verify: 1) DNS A/AAAA/CNAME points at Cloudflare's edge, 2) HTTPS cert provisioned (poll until ready or fail after 5min), 3) curl -sI https://managedsubagents.com returns 200 with the landing page bytes. Update docs/cloudflare-deploy-record.md with the bound-domain confirmation. Open a PR. DO NOT proceed if the MCP scope check from cf-mcp-handshake flagged a missing scope — fail loudly instead."
+id = "wd-4-stack"
+title = "Webapp redesign Task 4: Stack section (3 ASCII-bordered cards)"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 4 EXACTLY as written (steps 1-6). TDD pattern. Open a draft PR."
 disposition = "web"
 repo = "subagentapps/managed-subagents"
-label = "cloudflare-launch"
-depends_on = ["cf-deploy-worker"]
+label = "webapp-redesign"
+depends_on = ["wd-3-hero"]
+
+[[task]]
+id = "wd-5-selfref"
+title = "Webapp redesign Task 5: SelfRef section (build-meta counter)"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 5 EXACTLY as written (steps 1-6). TDD pattern; consumes BUILD_META from Task 2. Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-redesign"
+depends_on = ["wd-4-stack"]
+
+[[task]]
+id = "wd-6-footer"
+title = "Webapp redesign Task 6: Footer section"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 6 EXACTLY as written (steps 1-3). No test for this one - pure presentation. Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-redesign"
+depends_on = ["wd-5-selfref"]
+
+[[task]]
+id = "wd-7-compose"
+title = "Webapp redesign Task 7: compose App.tsx + design tokens"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 7 EXACTLY as written (steps 1-6). Replaces App.tsx + App.module.css contents. Step 3 runs all vitest tests, step 4 typechecks, step 5 runs vite build - all must pass before commit (step 6). Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-redesign"
+depends_on = ["wd-6-footer"]
+
+[[task]]
+id = "wd-8-playwright"
+title = "Webapp redesign Task 8: Playwright iPhone 16 Pro Max smoke tests"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 8 EXACTLY as written (steps 1-7). Installs @playwright/test + chromium + webkit; creates playwright config + 4 e2e tests across 2 viewports = 8 passing total before commit. Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-redesign"
+depends_on = ["wd-7-compose"]
+
+[[task]]
+id = "wd-9-deploy"
+title = "Webapp redesign Task 10: deploy to Cloudflare + verify live"
+prompt = "Open docs/superpowers/plans/2026-04-27-webapp-brutalist-mobile.md and execute Task 10 EXACTLY as written (steps 1-5). Runs npm run build + npx wrangler deploy from webapp/, verifies all three URLs return 200, appends a deploy entry to subagent-orchestrator/docs/cloudflare-deploy-record.md. Open a PR. Skip Task 9 (manual visual review). The deploy is the goal; the PR is just the record."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-redesign"
+depends_on = ["wd-8-playwright"]
