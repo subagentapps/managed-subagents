@@ -1,0 +1,97 @@
+.section {
+  padding: 4rem var(--gutter-mobile, 20px);
+  border-bottom: 1px solid var(--rule, #2a2a2a);
+}
+
+.heading {
+  font-family: var(--mono, monospace);
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
+  font-weight: 700;
+  color: var(--fg-bright, #fff);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.heading::before {
+  content: "## ";
+  color: var(--accent, #00ff5f);
+}
+
+.tagline {
+  font-size: 0.95rem;
+  color: var(--fg, #d4d4d4);
+  margin-bottom: 2.5rem;
+  max-width: 50ch;
+}
+
+.grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.card {
+  border: 1px solid var(--rule, #2a2a2a);
+  background: #050505;
+  padding: 1.5rem 1.25rem;
+  position: relative;
+}
+
+.cardLabel {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: #000;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent, #00ff5f);
+}
+
+.cardName {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--fg-bright, #fff);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.cardBody {
+  font-size: 0.92rem;
+  color: var(--fg, #d4d4d4);
+  line-height: 1.6;
+  max-width: 50ch;
+}
+
+.terminal {
+  margin-top: 1rem;
+  border: 1px solid var(--rule, #2a2a2a);
+  background: #0a0a0a;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+
+.terminal pre {
+  font-family: inherit;
+  white-space: pre;
+  margin: 0;
+}
+
+.prompt { color: var(--accent, #00ff5f); }
+.cmd    { color: var(--fg-bright, #fff); }
+.ok     { color: var(--accent, #00ff5f); }
+.dim    { color: #888; }
+
+@media (min-width: 600px) {
+  .section { padding: 5rem 2rem; }
+  .cardBody { max-width: none; }
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
