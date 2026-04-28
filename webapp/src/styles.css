@@ -9,6 +9,7 @@ html {
   color-scheme: dark;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;       /* prevent inner-content overflow from extending document width past the viewport */
 }
 
 body {
