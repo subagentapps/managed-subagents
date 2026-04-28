@@ -2,7 +2,7 @@
 
 Repository for the Claude Code orchestration stack: a CLI orchestrator that dispatches tasks across CLI / web / `@claude`-mention surfaces, watches the resulting PRs, and gates merges; plus the supporting reference docs (Anthropic skills, Cowork plugins, MCP servers, crawler plans).
 
-**Status:** v0.1 in active development. 27+ PRs merged on day-1; orchestrator scaffold + classifier + dispatchers + telemetry + hard rails all live.
+**Status:** v0.1 in active development. 90+ PRs merged on day-1; orchestrator scaffold + classifier + dispatchers + telemetry + hard rails + brutalist landing page all live. Production site at https://managedsubagents.com.
 
 ## Layout
 
@@ -17,13 +17,24 @@ Repository for the Claude Code orchestration stack: a CLI orchestrator that disp
 | [`connectors.toml`](./connectors.toml) | `~~category` → MCP server resolution (consumed by the cowork bridge) |
 | [`Makefile`](./Makefile) | `make help` for all common targets |
 
+## Quick Start
+
+See the live landing page at https://managedsubagents.com for the install flow. In short:
+
+```bash
+git clone https://github.com/subagentapps/managed-subagents.git
+cd managed-subagents/subagent-orchestrator
+npm ci && npm run build
+node dist/index.js doctor
+```
+
+The orchestrator reads `tasks.toml` and dispatches each `[[task]]` to a CLI / web / `@claude`-mention surface. Run `node dist/index.js tasks list` to inspect the queue.
+
 ### Subprojects
 
 | Path | Purpose |
 |---|---|
 | [`subagent-orchestrator/`](./subagent-orchestrator/) | The TypeScript CLI orchestrator. Has its own [`PROJECT_PLAN.md`](./subagent-orchestrator/PROJECT_PLAN.md) and [`CLAUDE.md`](./subagent-orchestrator/CLAUDE.md). 100+ vitest cases. |
-| [`subagent-typescript/`](./subagent-typescript/) | Cloudflare-deployed recurring crawler (Crawlee + Workers + DO + R2 + D1). Plan only. |
-| [`subagent-python/`](./subagent-python/) | Scrapy + Polars/DuckDB backfill + analytics crawler. Plan only. |
 | [`subagent-cowork/`](./subagent-cowork/) | 16 Cowork knowledge-work plugin docs + cli-cowork-bridge spec |
 | [`subagent-skills/`](./subagent-skills/) | 13 Anthropic skill catalog deeplinks (10 from the screenshot + 3 references) |
 | [`subagent-commands/`](./subagent-commands/) | Claude Code `/command` reference, sub-agents spec, weekly deep-dives (W13/W14/W15) |
@@ -31,29 +42,6 @@ Repository for the Claude Code orchestration stack: a CLI orchestrator that disp
 | [`subagent-hooks/`](./subagent-hooks/), [`subagent-plugins/`](./subagent-plugins/), [`subagent-sessions/`](./subagent-sessions/), [`subagent-tasks/`](./subagent-tasks/), [`subagent-tools/`](./subagent-tools/), [`subagent-channels/`](./subagent-channels/) | Primary Claude Code doc references |
 | [`subagent-mcp-servers/`](./subagent-mcp-servers/) | MCP server triage + `install.sh` for the Tier 1 set |
 | [`.github/workflows/`](./.github/workflows/) | `claude.yml` (@claude action) + `claude-code-review.yml` (auto-review on Opus 4.7) |
-
-## Quick start
-
-```bash
-# Bootstrap the orchestrator
-make install
-
-# Run all tests
-make test
-
-# Typecheck
-make typecheck
-
-# Status snapshot (open PRs + recent dispatches + cost)
-make status
-
-# List MCP servers / cowork plugins
-make mcp-list
-make cowork-list
-
-# Install Tier 1 MCP servers (idempotent; backs up settings.json)
-make mcp-install
-```
 
 ## Auto-review
 
