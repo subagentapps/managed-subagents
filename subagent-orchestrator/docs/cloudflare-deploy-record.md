@@ -55,3 +55,51 @@ Current Version ID: 29a57afa-c39f-4060-bf27-3a64edaeb562
 ## Scope boundary
 
 This record covers only the workers.dev preview deploy. Custom-domain / route binding for `managedsubagents.com` is **out of scope** here and is tracked under the separate `cf-bind-domain` task. No `routes` or `[[custom_domains]]` config was added or modified.
+
+---
+
+## managedsubagents-web — Custom Domain bind (cf-bind-domain)
+
+- **Timestamp (UTC):** 2026-04-28T03:53Z
+- **Worker name:** managedsubagents-web
+- **Version ID:** 0837ad39-76a5-4a86-a929-b8cf687aa0d0
+- **Bound from:** interactive Claude session (Cloudflare MCP not connected; the dispatched `cf-bind-domain` subagent had no MCP access, so the bind was performed via `wrangler deploy` from the user's authed terminal)
+
+### `wrangler.toml` change
+
+```toml
+workers_dev = true
+preview_urls = true
+
+[[routes]]
+pattern = "managedsubagents.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.managedsubagents.com"
+custom_domain = true
+```
+
+### Deploy output
+
+```
+Deployed managedsubagents-web triggers (1.19 sec)
+  https://managedsubagents-web.alex-e62.workers.dev
+  managedsubagents.com (custom domain)
+  www.managedsubagents.com (custom domain)
+Current Version ID: 0837ad39-76a5-4a86-a929-b8cf687aa0d0
+```
+
+### Verification
+
+| URL                                                  | HTTP | notes                          |
+|------------------------------------------------------|------|--------------------------------|
+| https://managedsubagents.com                         | 200  | TLS cert CN=managedsubagents.com, served by Cloudflare edge (172.67.214.224) |
+| https://www.managedsubagents.com                     | 200  |                                |
+| https://managedsubagents-web.alex-e62.workers.dev    | 200  | restored after re-enabling `workers_dev = true` |
+
+Local resolver may need `sudo dscacheutil -flushcache` to see the new domain; the public DNS at `1.1.1.1` and `8.8.8.8` resolved immediately to Cloudflare's edge.
+
+### Scope-gap note for future runs
+
+The `cf-bind-domain` task assumed a connected Cloudflare MCP. None was installed in either the dispatched subagent or the interactive session — `mcp__cloudflare__*` tools never appeared. Future automation either needs the Cloudflare MCP installed (`https://developers.cloudflare.com/agents/` for the install path) OR the orchestrator's task prompt should declare `wrangler` as the binding mechanism instead of the MCP.
