@@ -13,7 +13,7 @@ import { Command } from "commander";
 
 import { runBabysit } from "./cli/babysit.js";
 import { runDaemon } from "./cli/daemon.js";
-import { runDispatchAll, runDispatchExport, runDispatchImport, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask } from "./cli/dispatch.js";
+import { DISPATCH_UPDATE_STATUSES, runDispatchAll, runDispatchExport, runDispatchImport, runDispatchPrune, runDispatchQuery, runDispatchStats, runDispatchSummary, runDispatchTask, runDispatchUpdate, type DispatchUpdateStatus } from "./cli/dispatch.js";
 import { runDoctor } from "./cli/doctor.js";
 import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
@@ -307,6 +307,35 @@ dispatch
       until: opts.until,
       ...(hasPrFlag !== undefined ? { hasPr: hasPrFlag } : {}),
       limit: opts.limit,
+    });
+  });
+
+dispatch
+  .command("update <id>")
+  .description("Manually update a dispatch_log row's status (reconcile stuck rows after SIGTERM)")
+  .option("--db <path>", "Override dispatch_log database path")
+  .requiredOption(
+    "--status <s>",
+    `Required: one of ${DISPATCH_UPDATE_STATUSES.join(", ")}`,
+  )
+  .option("--reason <text>", "Optional note appended to the row's error column")
+  .action((id: string, opts: { db?: string; status: string; reason?: string }) => {
+    const status = opts.status as DispatchUpdateStatus;
+    if (!DISPATCH_UPDATE_STATUSES.includes(status)) {
+      console.error(`--status must be one of: ${DISPATCH_UPDATE_STATUSES.join(", ")}`);
+      process.exitCode = 2;
+      return;
+    }
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      console.error(`<id> must be a positive integer dispatch_log row id`);
+      process.exitCode = 2;
+      return;
+    }
+    runDispatchUpdate(numericId, {
+      ...(opts.db ? { dbPath: opts.db } : {}),
+      status,
+      ...(opts.reason ? { reason: opts.reason } : {}),
     });
   });
 

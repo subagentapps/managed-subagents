@@ -21,8 +21,10 @@ CREATE TABLE IF NOT EXISTS dispatch_log (
   review_finding_count INTEGER,
   ultrareview_used INTEGER NOT NULL DEFAULT 0,
   cost_usd_estimate REAL,
-  status TEXT NOT NULL CHECK (status IN ('dispatched','reviewing','ready-for-merge','needs-human','failed','merged'))
+  status TEXT NOT NULL CHECK (status IN ('dispatched','reviewing','ready-for-merge','needs-human','failed','merged','cancelled')),
+  error TEXT
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_dispatch_log_status ON dispatch_log(status, dispatched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dispatch_log_task ON dispatch_log(task_id, dispatched_at DESC);
@@ -40,6 +42,7 @@ export interface DispatchLogRow {
   ultrareview_used: 0 | 1;
   cost_usd_estimate: number | null;
   status: TaskResult["status"];
+  error: string | null;
 }
 
 export interface OpenDbOptions {
@@ -55,7 +58,69 @@ export function openDb(options: OpenDbOptions = {}): Database.Database {
   const db = new Database(path, { readonly: options.readonly ?? false });
   db.pragma("journal_mode = WAL");
   db.exec(DISPATCH_LOG_DDL);
+  migrateDispatchLog(db);
   return db;
+}
+
+/**
+ * Idempotent in-place migration for older `dispatch_log` tables created
+ * before the `error` column and `'cancelled'` status existed.
+ *
+ * - Rebuilds the table when the existing CHECK constraint omits `'cancelled'`
+ *   (SQLite can't ALTER a CHECK in place; we copy rows into a new table).
+ * - Adds the nullable `error` column when it's missing.
+ *
+ * Safe on fresh DBs (the rebuild guard fails-closed; the column add is a
+ * no-op when the column is already present).
+ */
+function migrateDispatchLog(db: Database.Database): void {
+  const existing = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='dispatch_log'`)
+    .get() as { sql: string } | undefined;
+
+  if (existing && !existing.sql.includes("'cancelled'")) {
+    // Rebuild the table to widen the CHECK constraint. Wrapping the copy
+    // in a transaction means a mid-rebuild crash leaves the original intact.
+    db.exec(`
+      BEGIN;
+      CREATE TABLE dispatch_log__new (
+        id INTEGER PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        disposition TEXT NOT NULL,
+        dispatched_at TEXT NOT NULL,
+        pr_url TEXT,
+        pr_number INTEGER,
+        pr_merged_at TEXT,
+        review_finding_count INTEGER,
+        ultrareview_used INTEGER NOT NULL DEFAULT 0,
+        cost_usd_estimate REAL,
+        status TEXT NOT NULL CHECK (status IN ('dispatched','reviewing','ready-for-merge','needs-human','failed','merged','cancelled')),
+        error TEXT
+      );
+      INSERT INTO dispatch_log__new
+        (id, task_id, disposition, dispatched_at, pr_url, pr_number, pr_merged_at,
+         review_finding_count, ultrareview_used, cost_usd_estimate, status)
+        SELECT id, task_id, disposition, dispatched_at, pr_url, pr_number, pr_merged_at,
+               review_finding_count, ultrareview_used, cost_usd_estimate, status
+          FROM dispatch_log;
+      DROP TABLE dispatch_log;
+      ALTER TABLE dispatch_log__new RENAME TO dispatch_log;
+      CREATE INDEX IF NOT EXISTS idx_dispatch_log_status ON dispatch_log(status, dispatched_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_dispatch_log_task ON dispatch_log(task_id, dispatched_at DESC);
+      COMMIT;
+    `);
+    return;
+  }
+
+  // Fast path: table is already current-shape, but the `error` column may
+  // be missing on DBs created between the table-was-current era and this
+  // migration landing.
+  const cols = db
+    .prepare(`PRAGMA table_info(dispatch_log)`)
+    .all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "error")) {
+    db.exec(`ALTER TABLE dispatch_log ADD COLUMN error TEXT`);
+  }
 }
 
 /** Insert a row when a dispatch begins. Returns the new row id. */
@@ -125,6 +190,49 @@ export function updateDispatch(
   if (sets.length === 0) return;
   vals.push(id);
   db.prepare(`UPDATE dispatch_log SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+}
+
+/**
+ * Manually set the status of a dispatch_log row, optionally annotating the
+ * `error` column with an operator-supplied reason.
+ *
+ * Intended for fixing rows the orchestrator left in a non-terminal state
+ * (e.g. status='dispatched' after a SIGTERM mid-run) so they stop polluting
+ * `dispatch summary` / `dispatch query` output.
+ *
+ * When `reason` is provided, "[manual: <reason>]" is appended to the
+ * existing error column (or written as the new value if error was null).
+ *
+ * Throws if no row matches `id` — silent no-ops would mask typos.
+ */
+export function updateDispatchStatus(
+  db: Database.Database,
+  id: number,
+  status: TaskResult["status"],
+  reason?: string,
+): void {
+  const existing = db
+    .prepare(`SELECT error FROM dispatch_log WHERE id = ?`)
+    .get(id) as { error: string | null } | undefined;
+  if (existing === undefined) {
+    throw new Error(`updateDispatchStatus: no dispatch_log row with id=${id}`);
+  }
+
+  if (reason === undefined) {
+    db.prepare(`UPDATE dispatch_log SET status = ? WHERE id = ?`).run(status, id);
+    return;
+  }
+
+  const annotation = `[manual: ${reason}]`;
+  const nextError =
+    existing.error && existing.error.length > 0
+      ? `${existing.error}\n${annotation}`
+      : annotation;
+  db.prepare(`UPDATE dispatch_log SET status = ?, error = ? WHERE id = ?`).run(
+    status,
+    nextError,
+    id,
+  );
 }
 
 /** Read recent rows, newest first. */
@@ -335,8 +443,8 @@ export function importDispatches(
   const insertStmt = db.prepare(
     `INSERT INTO dispatch_log
        (id, task_id, disposition, dispatched_at, pr_url, pr_number, pr_merged_at,
-        review_finding_count, ultrareview_used, cost_usd_estimate, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        review_finding_count, ultrareview_used, cost_usd_estimate, status, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const deleteStmt = db.prepare(`DELETE FROM dispatch_log WHERE id = ?`);
 
@@ -367,6 +475,7 @@ export function importDispatches(
           row.id, row.task_id, row.disposition, row.dispatched_at,
           row.pr_url, row.pr_number, row.pr_merged_at,
           row.review_finding_count, row.ultrareview_used, row.cost_usd_estimate, row.status,
+          row.error ?? null,
         );
       }
     }

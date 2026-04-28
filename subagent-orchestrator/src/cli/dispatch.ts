@@ -9,7 +9,7 @@ import { parseTargetFromPrompt } from "../dispatch/claude-mention.js";
 import { orchestrateAll, orchestrateOne } from "../orchestrator.js";
 import { topoSortTasks, TopoSortError } from "../topo.js";
 import { validateTasks } from "../validate.js";
-import { exportDispatches, importDispatches, openDb, pruneDispatches, queryDispatches, summarizeDispatches, type DispatchExportFile, type DispatchLogRow, type ImportDispatchesOptions, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
+import { exportDispatches, importDispatches, openDb, pruneDispatches, queryDispatches, summarizeDispatches, updateDispatchStatus, type DispatchExportFile, type DispatchLogRow, type ImportDispatchesOptions, type PruneDispatchesOptions, type QueryDispatchesFilters, type SummarizeDispatchesOptions } from "../store/db.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { loadTasks } from "../store/tasks.js";
 import type { OrchestrateResult } from "../orchestrator.js";
@@ -142,6 +142,39 @@ function runDryRun(
   }
   console.log(`\n[dry-run] ${ordered.length} task(s); ${blocking} blocked, ${report.errors} validate-error, ${report.warnings} validate-warn`);
   if (blocking > 0 || report.errors > 0) process.exitCode = 1;
+}
+
+export const DISPATCH_UPDATE_STATUSES = [
+  "failed",
+  "cancelled",
+  "ready-for-merge",
+  "merged",
+] as const satisfies ReadonlyArray<TaskResult["status"]>;
+
+export type DispatchUpdateStatus = (typeof DISPATCH_UPDATE_STATUSES)[number];
+
+export interface DispatchUpdateOptions {
+  dbPath?: string;
+  status: DispatchUpdateStatus;
+  reason?: string;
+}
+
+/**
+ * Manually update a dispatch_log row's status (and optionally annotate
+ * its error column). Used to reconcile rows the orchestrator left behind
+ * after a SIGTERM / crash so they stop showing up as in-flight.
+ */
+export function runDispatchUpdate(id: number, options: DispatchUpdateOptions): void {
+  const db = openDb(options.dbPath ? { path: options.dbPath } : {});
+  try {
+    updateDispatchStatus(db, id, options.status, options.reason);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exitCode = 2;
+    return;
+  }
+  const reasonNote = options.reason ? ` (reason: ${options.reason})` : "";
+  console.log(`updated dispatch_log id=${id} -> status=${options.status}${reasonNote}`);
 }
 
 export function runDispatchStats(options: { dbPath?: string; limit?: number } = {}): void {

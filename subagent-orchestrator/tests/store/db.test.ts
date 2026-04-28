@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 
-import { exportDispatches, importDispatches, listRecent, openDb, pruneDispatches, queryDispatches, recordDispatch, summarizeDispatches, updateDispatch, type DispatchExportFile } from "../../src/store/db.js";
+import { exportDispatches, importDispatches, listRecent, openDb, pruneDispatches, queryDispatches, recordDispatch, summarizeDispatches, updateDispatch, updateDispatchStatus, type DispatchExportFile } from "../../src/store/db.js";
 
 describe("orchestrator db", () => {
   let db: Database.Database;
@@ -88,6 +88,36 @@ describe("orchestrator db", () => {
       // @ts-expect-error: deliberately testing invalid value
       updateDispatch(db, id, { status: "bogus-status" }),
     ).toThrow();
+  });
+
+  describe("updateDispatchStatus (manual reconcile)", () => {
+    it("updates the status column for an existing row", () => {
+      const id = recordDispatch(db, { taskId: "stuck", disposition: "web" });
+      updateDispatchStatus(db, id, "cancelled");
+      expect(listRecent(db)[0]?.status).toBe("cancelled");
+    });
+
+    it("appends [manual: <reason>] to error when reason is provided", () => {
+      const id = recordDispatch(db, { taskId: "stuck", disposition: "web" });
+      updateDispatchStatus(db, id, "failed", "killed by user");
+      const row = listRecent(db)[0];
+      expect(row?.status).toBe("failed");
+      expect(row?.error).toBe("[manual: killed by user]");
+    });
+
+    it("appends to existing error rather than overwriting", () => {
+      const id = recordDispatch(db, { taskId: "stuck", disposition: "web" });
+      updateDispatch(db, id, { status: "failed" });
+      // Manually set an existing error so we can verify append behavior
+      db.prepare(`UPDATE dispatch_log SET error = ? WHERE id = ?`).run("first failure", id);
+      updateDispatchStatus(db, id, "cancelled", "killed by user");
+      const row = listRecent(db)[0];
+      expect(row?.error).toBe("first failure\n[manual: killed by user]");
+    });
+
+    it("throws on unknown id rather than silently no-op", () => {
+      expect(() => updateDispatchStatus(db, 99999, "failed")).toThrow(/no dispatch_log row with id=99999/);
+    });
   });
 });
 
