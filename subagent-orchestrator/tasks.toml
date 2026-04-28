@@ -24,21 +24,6 @@
 # depends_on      = []                                  # list of task ids to complete first
 
 # ─── 2026-04-28 batch — independent improvements (no Playwright, no wrangler) ───
-
-[[task]]
-id = "fix-readonly-heuristic"
-title = "Loosen READ_ONLY_RE so editing tasks aren't forced into plan mode"
-prompt = """
-Open subagent-orchestrator/src/dispatch/local.ts. The READ_ONLY_RE regex on line 61-62 matches words like `typecheck`, `run tests`, `inspect`, `summarize` that commonly appear inside EDIT-task prompts as verification steps — forcing those tasks into plan mode where the SDK cannot write files. Reproduced twice in production: dispatch_log rows for local tasks completing at \\$1.00+ but producing no working-tree changes, no commits, no branches, no PRs.
-
-Change the heuristic so edit-intent wins ties. Concrete change to resolvePermissionShape (around line 75-84): if the haystack contains any of (write|modify|create|fix|add|implement|replace|edit) as whole words, return EDIT_TOOLS regardless of READ_ONLY_RE matching. Keep READ_ONLY_RE as the secondary signal for genuinely read-only tasks. Add a vitest case in tests/dispatch/local.test.ts (or wherever resolvePermissionShape is exercised) covering the regression: a task whose prompt body contains "Open X, fix Y, then verify with typecheck" must resolve to acceptEdits mode with EDIT_TOOLS. Also keep an existing read-only-only case green.
-
-Open a draft PR titled `fix(orchestrator): edit-intent wins over read-only verbs in heuristic`.
-"""
-disposition = "local"
-repo = "subagentapps/managed-subagents"
-label = "orchestrator"
-
 [[task]]
 id = "webapp-og-card"
 title = "Add OpenGraph + Twitter card meta to webapp/index.html"
