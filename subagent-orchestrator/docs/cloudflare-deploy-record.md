@@ -103,3 +103,32 @@ Local resolver may need `sudo dscacheutil -flushcache` to see the new domain; th
 ### Scope-gap note for future runs
 
 The `cf-bind-domain` task assumed a connected Cloudflare MCP. None was installed in either the dispatched subagent or the interactive session — `mcp__cloudflare__*` tools never appeared. Future automation either needs the Cloudflare MCP installed (`https://developers.cloudflare.com/agents/` for the install path) OR the orchestrator's task prompt should declare `wrangler` as the binding mechanism instead of the MCP.
+
+---
+
+## managedsubagents-web — brutalist redesign deploy
+
+- **Timestamp (UTC):** 2026-04-28T04:33:00Z
+- **Worker name:** managedsubagents-web
+- **Version ID:** 898da0c3-54b0-4259-81d1-adc027d965a5
+- **Trigger:** mobile-first brutalist-terminal redesign (PRs #65 wd-1 viewport, #66 wd-2 vitest+BUILD_META, #67 wd-3 Hero, #68 wd-4 Stack, #69 wd-5 SelfRef, #70 wd-6 Footer, #71 wd-7 compose App, #72 wd-8 Playwright)
+
+### Highlights
+
+- Mobile-first CSS targeting iPhone 16 Pro Max (430×932) as the primary canvas
+- Brutalist-terminal aesthetic: pure black, monospace, ASCII boxes, phosphor-green accent (#00ff5f)
+- Self-referential build-meta counter ("this site was shipped by N dispatched subagents")
+- Vitest unit tests + Playwright iPhone-viewport smoke tests
+- Bundle: `index.html` 1.11kB · `index-BG2LsUM2.css` 7.54kB (gzip 2.27kB) · `index-DAcGmY6B.js` 148.98kB (gzip 48.08kB)
+
+### Verification
+
+- `curl https://managedsubagents.com` → HTTP 200, `<title>managedsubagents — autonomous PR orchestration</title>` (live)
+- `curl https://managedsubagents-web.alex-e62.workers.dev` → HTTP 200
+- `curl --resolve www.managedsubagents.com:443:172.67.214.224 https://www.managedsubagents.com` → HTTP 200 (local DNS cache only; public resolvers see it immediately)
+- Playwright e2e: 4 specs × 2 viewports (iphone-16-pro-max + desktop-chrome) = 8/8 passing
+- Vitest: BUILD_META + Hero + Stack + SelfRef tests all passing
+
+### Cost ledger (subagent-driven build)
+
+PRs #65–#72 were dispatched one-at-a-time through the orchestrator. Combined cost across the 8 web-disposition tasks: roughly $5.41 (per dispatch_log: $0.61 + $0.79 + $1.36 + $0.75 + $0.70 + $0.53 + $0.67 + ~$0 manual). Tasks 8 (Playwright install) and 10 (deploy) ran from the interactive session because the dispatched subagent sandbox can't run `npx playwright install` (full ~75MiB browser binary downloads) or `wrangler deploy` (needs Cloudflare OAuth that subagents don't carry).
