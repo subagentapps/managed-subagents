@@ -2,8 +2,21 @@ name = "managedsubagents-web"
 account_id = "e6294e3ea89f8207af387d459824aaae"
 compatibility_date = "2026-04-27"
 main = "src/worker.ts"
+# Keep the workers.dev preview URL alive as a fallback alongside the custom domain.
+workers_dev = true
+preview_urls = true
 
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+# Custom Domain — Cloudflare provisions DNS + cert automatically.
+# The zone managedsubagents.com must already be in this account.
+[[routes]]
+pattern = "managedsubagents.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.managedsubagents.com"
+custom_domain = true
