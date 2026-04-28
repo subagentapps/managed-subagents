@@ -42,3 +42,4 @@ Auto-review on Opus 4.7 averages **$0.90–$1.30 per PR** for typical 100–300 
 - Orchestrator dispatches tasks that often produce PRs against this same repo or others under `subagentapps/`.
 - Cowork plugins (see `../subagent-cowork/`) get invoked via the orchestrator's `dispatch/local.ts` once the cowork bridge (M3+) lands.
 - The shared `connectors.toml` at repo root (see `../connectors.toml`) is consumed by the cowork bridge, not directly by the orchestrator.
+- Sibling project: `../webapp/` — Vite + React + Cloudflare Workers app (`managedsubagents-web`). Served locally via `npm run dev` (Vite) or `npx wrangler dev` (Workers runtime). Deployed via `npx wrangler deploy`.
