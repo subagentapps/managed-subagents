@@ -61,6 +61,15 @@ const EDIT_TOOLS = ["Read", "Glob", "Grep", "Bash", "Edit", "Write"];
 const READ_ONLY_RE =
   /\b(read-only|investigate|explore|search|grep|find|inspect|describe|summarize|run\s+tests?|run\s+lint|run\s+format|typecheck)\b/i;
 
+// Edit-intent verbs override READ_ONLY_RE: a prompt containing these is
+// asking the SDK to mutate files, even if it also mentions verification
+// steps like `typecheck` or `run tests` that READ_ONLY_RE matches. Without
+// this override the SDK ran in plan mode and silently produced no changes
+// while still reporting `ready-for-merge` (burned ~$2.21 across two
+// production sessions before this was caught).
+const EDIT_INTENT_RE =
+  /\b(write|modify|create|fix|add|implement|replace|edit|append|insert|delete|remove|refactor|rename|update|bump|migrate)\b/i;
+
 export class DispatchError extends Error {
   constructor(message: string, public readonly partial?: Partial<TaskResult>) {
     super(message);
@@ -77,6 +86,9 @@ export function resolvePermissionShape(task: Task): {
   allowedTools: string[];
 } {
   const haystack = `${task.title}\n${task.prompt}`;
+  if (EDIT_INTENT_RE.test(haystack)) {
+    return { permissionMode: "acceptEdits", allowedTools: EDIT_TOOLS };
+  }
   if (READ_ONLY_RE.test(haystack)) {
     return { permissionMode: "plan", allowedTools: READ_ONLY_TOOLS };
   }
