@@ -21,4 +21,67 @@
 # deep_review     = false                               # if true, run /ultrareview after /review
 # depends_on      = []                                  # list of task ids to complete first
 
-# ─── 2026-04-28 batch 3 — second-order bug + missing assets + changelog ───
+# ─── 2026-04-28 batch 4 — README refresh + dispatch update CLI (2 tasks) ───
+
+[[task]]
+id = "webapp-readme-refresh"
+title = "Refresh README.md with current stats and a Quick Start"
+prompt = """
+Open README.md at the repo root. Two concrete problems to fix:
+
+1. The Status line claims "27+ PRs merged on day-1" but the actual count today is 90+ merged PRs. Update it to read approximately:
+   "**Status:** v0.1 in active development. 90+ PRs merged on day-1; orchestrator scaffold + classifier + dispatchers + telemetry + hard rails + brutalist landing page all live. Production site at https://managedsubagents.com."
+
+2. There is no Quick Start section. After the existing "## Layout" section and before any subproject tables, add a "## Quick Start" section with:
+
+   ```
+   ## Quick Start
+
+   See the live landing page at https://managedsubagents.com for the install flow. In short:
+
+   ```bash
+   git clone https://github.com/subagentapps/managed-subagents.git
+   cd managed-subagents/subagent-orchestrator
+   npm ci && npm run build
+   node dist/index.js doctor
+   ```
+
+   The orchestrator reads `tasks.toml` and dispatches each `[[task]]` to a CLI / web / `@claude`-mention surface. Run `node dist/index.js tasks list` to inspect the queue.
+   ```
+
+3. While there, prune the layout table: remove the "Plan only" subproject rows for `subagent-typescript/`, `subagent-python/`, and any others marked "Plan only" — those are not relevant to a first-time visitor. Keep `subagent-orchestrator/` and the directly-shipping ones.
+
+After your changes, the file MUST contain the literal string "managedsubagents.com" at least once (verifiable with `grep -c managedsubagents.com README.md`). Do NOT add any HTML or screenshots — keep it pure markdown.
+
+Open a draft PR titled `docs: refresh README with current PR count + Quick Start linking to managedsubagents.com`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "orchestrator-dispatch-update"
+title = "Add dispatch update CLI to mark stuck rows"
+prompt = """
+The orchestrator's dispatch_log table accumulates rows with status='dispatched' when a dispatch is killed mid-run (e.g. SIGTERM from the user). Production row #19 (task wd-2-vitest, killed by user 8 hours ago) has been polluting `dispatch summary` ever since because there is no CLI to update it.
+
+Implement this:
+
+1. Open subagent-orchestrator/src/store/db.ts. Add (or extend) a function `updateDispatchStatus(db, id: number, status: string, reason?: string): void` that updates the dispatch_log row's status column AND (if reason is provided) appends "[manual: <reason>]" to the error column. Throw if the row doesn't exist.
+
+2. Open subagent-orchestrator/src/index.ts. The CLI uses commander; locate the `dispatch` subcommand registration. Add a new `dispatch update <id>` subcommand with `--status <s>` (required, must be one of: failed, cancelled, ready-for-merge, merged) and optional `--reason <text>`. The handler reads id and options, calls updateDispatchStatus, prints a one-line confirmation.
+
+3. Add tests in subagent-orchestrator/tests/store/db.test.ts (or wherever the dispatch CRUD tests live):
+   a. updateDispatchStatus updates the status column for an existing row
+   b. updateDispatchStatus appends the manual reason to error when provided
+   c. updateDispatchStatus throws on unknown id
+
+4. Add a CLI smoke test in subagent-orchestrator/tests/cli/ for the new subcommand if a similar pattern exists in tests/cli/dispatch.test.ts; otherwise just make sure step 3's unit tests cover the behavior and the index.ts wiring typechecks.
+
+Run `npx tsc --noEmit && npx vitest run` — all must pass before commit.
+
+Open a draft PR titled `feat(orchestrator): add dispatch update CLI to mark stuck rows`.
+"""
+disposition = "local"
+repo = "subagentapps/managed-subagents"
+label = "orchestrator"
