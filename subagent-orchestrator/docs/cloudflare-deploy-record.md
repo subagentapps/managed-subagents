@@ -132,3 +132,36 @@ The `cf-bind-domain` task assumed a connected Cloudflare MCP. None was installed
 ### Cost ledger (subagent-driven build)
 
 PRs #65–#72 were dispatched one-at-a-time through the orchestrator. Combined cost across the 8 web-disposition tasks: roughly $5.41 (per dispatch_log: $0.61 + $0.79 + $1.36 + $0.75 + $0.70 + $0.53 + $0.67 + ~$0 manual). Tasks 8 (Playwright install) and 10 (deploy) ran from the interactive session because the dispatched subagent sandbox can't run `npx playwright install` (full ~75MiB browser binary downloads) or `wrangler deploy` (needs Cloudflare OAuth that subagents don't carry).
+
+---
+
+## managedsubagents-web — SEO + Install batch deploy
+
+- **Timestamp (UTC):** 2026-04-28T13:00:00Z
+- **Worker name:** managedsubagents-web
+- **Version ID:** c1a098cf-387e-4143-8a5e-b0aad39e4e6c
+- **Trigger:** SEO + UX batch (PRs #80 og-card, #81 robots+sitemap, #82 jsonld, #83 install-section)
+
+### Highlights
+
+- OpenGraph + Twitter card meta — links to managedsubagents.com unfurl with brand-consistent preview on Twitter/X, Slack, iMessage, Discord (image is `/og-image.png`, follow-up to create the actual asset)
+- `robots.txt` + `sitemap.xml` served at the apex
+- `SoftwareApplication` JSON-LD schema (offers price=0, applicationCategory=DeveloperApplication)
+- New in-page `Install` section between Stack and SelfRef — three brutalist-terminal steps (clone, build, doctor) with expected output
+
+### Verification
+
+- All 4 URLs (apex + workers.dev + robots.txt + sitemap.xml) → HTTP 200
+- OG meta + Twitter card + JSON-LD all present in served HTML
+- Install section verified present in JS bundle (rendered client-side by React)
+- Bundle: `index.html` 2.58kB · `index-CQWXiCHG.css` 9.11kB (gzip 2.41kB) · `index-Bc9Jiof4.js` 151.04kB (gzip 48.74kB)
+  - Bundle grew by 2.06kB JS / 1.57kB CSS / 1.47kB HTML vs prior deploy `898da0c3` — proportional to the added Install section + meta blocks
+
+### Cost ledger (this batch)
+
+PR #78 fix-readonly-heuristic (manual; ~$0 — pre-flight wasted $1.63 across two trapped local dispatches *before* the fix was made)
+PR #80 og-card $0.37
+PR #81 robots-sitemap $0.33
+PR #82 jsonld $0.28
+PR #83 install-section $0.67
+Total batch dispatches: ~$1.65 (excluding the $1.63 wasted on the heuristic-bug victims)
