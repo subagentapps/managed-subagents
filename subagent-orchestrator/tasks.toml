@@ -26,13 +26,14 @@
 # ─── 2026-04-28 batch — independent improvements (no Playwright, no wrangler) ───
 
 [[task]]
-id = "fix-tasks-remove-bug"
-title = "Fix tasks-remove.ts boundary-detection bug"
+id = "fix-readonly-heuristic"
+title = "Loosen READ_ONLY_RE so editing tasks aren't forced into plan mode"
 prompt = """
-Open subagent-orchestrator/src/tasks-remove.ts. There is a known bug in how it locates the end of a [[task]] stanza: when two stanzas abut without a blank line between them, removing one also removes the next. Reproduce with a fixture in tests/cli/tasks-remove.test.ts that has two adjacent stanzas (no blank line); call the remove function on the first id and assert the second stanza survives unchanged. The test should fail before the fix. Fix the boundary detection so it stops at either:
-  (a) a blank line followed by the next `[[task]]` line, OR
-  (b) the immediate next `[[task]]` line at column 0,
-whichever comes first. After the fix the regression test must pass and all existing tests/cli tests must still pass. Run `npm run typecheck && npm test` before commit. Open a draft PR titled `fix(orchestrator): tasks-remove no longer eats adjacent stanza`.
+Open subagent-orchestrator/src/dispatch/local.ts. The READ_ONLY_RE regex on line 61-62 matches words like `typecheck`, `run tests`, `inspect`, `summarize` that commonly appear inside EDIT-task prompts as verification steps — forcing those tasks into plan mode where the SDK cannot write files. Reproduced twice in production: dispatch_log rows for local tasks completing at \\$1.00+ but producing no working-tree changes, no commits, no branches, no PRs.
+
+Change the heuristic so edit-intent wins ties. Concrete change to resolvePermissionShape (around line 75-84): if the haystack contains any of (write|modify|create|fix|add|implement|replace|edit) as whole words, return EDIT_TOOLS regardless of READ_ONLY_RE matching. Keep READ_ONLY_RE as the secondary signal for genuinely read-only tasks. Add a vitest case in tests/dispatch/local.test.ts (or wherever resolvePermissionShape is exercised) covering the regression: a task whose prompt body contains "Open X, fix Y, then verify with typecheck" must resolve to acceptEdits mode with EDIT_TOOLS. Also keep an existing read-only-only case green.
+
+Open a draft PR titled `fix(orchestrator): edit-intent wins over read-only verbs in heuristic`.
 """
 disposition = "local"
 repo = "subagentapps/managed-subagents"
