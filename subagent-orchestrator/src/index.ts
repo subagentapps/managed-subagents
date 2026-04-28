@@ -19,6 +19,7 @@ import { runMerge } from "./cli/merge.js";
 import { runReview } from "./cli/review.js";
 import { runShip } from "./cli/ship.js";
 import { runTasksAdd } from "./cli/tasks-add.js";
+import { runTasksRemove } from "./cli/tasks-remove.js";
 import { runTasksClassify } from "./cli/tasks-classify.js";
 import { runTasksDeps } from "./cli/tasks-deps.js";
 import { runTasksList } from "./cli/tasks-list.js";
@@ -89,6 +90,15 @@ tasks
         : {}),
     };
     runTasksAdd({ tasksTomlPath: opts.file, dryRun: opts.dryRun, input });
+  });
+
+tasks
+  .command("remove <id>")
+  .description("Excise a task stanza from tasks.toml (preserves comments + whitespace)")
+  .option("-f, --file <path>", "Path to tasks.toml (default: ./tasks.toml)")
+  .option("--dry-run", "Print the stanza that would be removed without writing")
+  .action((id: string, opts: { file?: string; dryRun?: boolean }) => {
+    runTasksRemove({ tasksTomlPath: opts.file, id, dryRun: opts.dryRun });
   });
 
 tasks
