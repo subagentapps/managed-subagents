@@ -5,9 +5,7 @@
 # and processes tasks in declaration order, respecting per-task
 # `depends_on` if set.
 #
-# IMPORTANT: leave a blank line between every [[task]] stanza. The
-# tasks-remove.ts boundary regex in v0.1 grabs the next stanza if they
-# abut without a separator. (Tracked as the next batch's first task.)
+# IMPORTANT: leave a blank line between every [[task]] stanza.
 #
 # Schema (see ../PROJECT_PLAN.md §3 milestone M1):
 #
@@ -23,4 +21,109 @@
 # deep_review     = false                               # if true, run /ultrareview after /review
 # depends_on      = []                                  # list of task ids to complete first
 
-# ─── 2026-04-28 batch — independent improvements (no Playwright, no wrangler) ───
+# ─── 2026-04-28 batch 3 — second-order bug + missing assets + changelog ───
+
+[[task]]
+id = "fix-readyformerge-when-no-edits"
+title = "dispatchLocal must return failed when plan-mode produces no edits"
+prompt = """
+Open subagent-orchestrator/src/dispatch/local.ts. There is a known second-order reporting bug: when dispatchLocal runs in plan mode (permissionMode === 'plan'), the SDK cannot write files, so the resulting working tree is unchanged — yet dispatchLocal still returns status='ready-for-merge' as long as the SDK exits cleanly. Production rows #20 and #21 in dispatch_log show this exact failure mode.
+
+Modify dispatchLocal so that AFTER the SDK loop completes, if permissionMode was 'plan' AND the streamed messages contain no Edit/Write/MultiEdit tool_use entries, return TaskResult with status='failed' and error='plan-mode produced no edits — heuristic likely classified this as read-only by mistake'. Keep the existing success path intact for genuine read-only tasks (those should still succeed even if they wrote nothing — the heuristic correctly classified them).
+
+Approach hint: track a boolean during the message-stream consumption that flips true on any tool_use whose name matches /^(Edit|Write|MultiEdit)$/. After the stream ends, branch on permissionMode + that boolean.
+
+Add a vitest case in tests/dispatch/local.test.ts using the existing mockQuery pattern: a task with EDIT_INTENT title that somehow ended up in plan mode (force it via a constructed messages array containing only `assistant` + `result` messages, no Edit/Write tool_uses) must resolve to status='failed' with the expected error string.
+
+Open a draft PR titled `fix(orchestrator): plan-mode no-op should fail, not ready-for-merge`.
+"""
+disposition = "local"
+repo = "subagentapps/managed-subagents"
+label = "orchestrator"
+
+[[task]]
+id = "webapp-og-image"
+title = "Generate /og-image.png so social unfurlers have an actual image"
+prompt = """
+The webapp's index.html references /og-image.png in og:image and twitter:image meta tags, but the file does not exist (curl returns 404). Generate it.
+
+Approach: write a one-shot Node script at webapp/scripts/build-og-image.mjs that uses Sharp (already available — install if missing as a devDep) to compose a 1200x630 PNG with:
+  - background: solid #000000
+  - centered text in monospace, color #00ff5f (phosphor green): the literal string "managedsubagents"
+  - smaller subtext below: "ship · review · merge — on loop."
+  - thin #2a2a2a border 16px in from each edge
+  - file size goal: under 60kB
+
+Save output to webapp/public/og-image.png. Run the script once to produce the file. Add an "og:image" npm script: `node scripts/build-og-image.mjs` for future regeneration.
+
+After the file is in webapp/public/, run `npm run build` and confirm dist/og-image.png exists. Open a draft PR titled `feat(webapp): generate phosphor-green og-image.png for social unfurls`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "webapp-favicon"
+title = "Replace data-URI favicon with proper PNG set"
+prompt = """
+The webapp's index.html currently has an inline data-URI SVG favicon showing a green ">" character. iOS home-screen icons need a real PNG.
+
+Generate three PNG icons via a one-shot Node script at webapp/scripts/build-favicons.mjs using Sharp:
+  - webapp/public/favicon-16.png (16x16)
+  - webapp/public/favicon-32.png (32x32)
+  - webapp/public/apple-touch-icon.png (180x180)
+All three: solid #000000 background, centered phosphor-green ">" character (#00ff5f) in monospace, the character should fill ~70% of the canvas.
+
+In webapp/index.html, replace the existing inline data-URI <link rel="icon"> tag with:
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+Run the script. Run `npm run build` and confirm all three PNG files appear in dist/. Open a draft PR titled `feat(webapp): proper favicon PNG set for desktop + iOS home screen`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "webapp-changelog-section"
+title = "Add in-page Changelog section listing recent merged PRs"
+prompt = """
+Add a new Changelog section to the webapp, between the Install and SelfRef sections, that lists the six most recent meaningful merged PRs.
+
+Steps:
+
+1. Create webapp/src/data/changelog.ts with this exact frozen content (a hand-checked-in array; later automation can regenerate it):
+
+```ts
+export interface ChangelogEntry {
+  pr: number;
+  title: string;
+  mergedAt: string;
+}
+
+export const CHANGELOG: readonly ChangelogEntry[] = [
+  { pr: 78, title: "fix(orchestrator): edit-intent verbs override read-only heuristic", mergedAt: "2026-04-28" },
+  { pr: 80, title: "feat(webapp): OG + Twitter card meta for link unfurls", mergedAt: "2026-04-28" },
+  { pr: 81, title: "feat(webapp): robots.txt + sitemap.xml for crawlers", mergedAt: "2026-04-28" },
+  { pr: 82, title: "feat(webapp): SoftwareApplication JSON-LD for SEO", mergedAt: "2026-04-28" },
+  { pr: 83, title: "feat(webapp): Install section with copy-paste setup", mergedAt: "2026-04-28" },
+  { pr: 84, title: "docs: record SEO+install batch deploy + clear queue", mergedAt: "2026-04-28" },
+] as const;
+```
+
+2. Create webapp/src/data/changelog.test.ts asserting CHANGELOG has length 6, each entry has the three required fields, and PR numbers are strictly increasing.
+
+3. Create webapp/src/sections/Changelog.tsx — brutalist-terminal style consistent with the other sections. Render a heading "## changelog" in monospace, then an unordered list where each item shows `#<pr>` (linked to the GitHub PR URL https://github.com/subagentapps/managed-subagents/pull/<pr>) followed by the title text and a dim mergedAt date.
+
+4. Create webapp/src/sections/Changelog.module.css with mobile-first layout consistent with the other section modules.
+
+5. Create webapp/src/sections/Changelog.test.tsx (vitest + @testing-library/react) verifying the section renders, contains the word "changelog" in a heading, and renders 6 list items with PR links.
+
+6. Modify webapp/src/App.tsx — import Changelog and place it between Install and SelfRef.
+
+Run `npx tsc --noEmit && npx vitest run && npm run build` — all three must complete cleanly before commit. Open a draft PR titled `feat(webapp): in-page Changelog section listing recent PRs`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
