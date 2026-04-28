@@ -5,6 +5,10 @@
 # and processes tasks in declaration order, respecting per-task
 # `depends_on` if set.
 #
+# IMPORTANT: leave a blank line between every [[task]] stanza. The
+# tasks-remove.ts boundary regex in v0.1 grabs the next stanza if they
+# abut without a separator. (Tracked as the next batch's first task.)
+#
 # Schema (see ../PROJECT_PLAN.md §3 milestone M1):
 #
 # [[task]]
@@ -18,23 +22,90 @@
 # automerge       = false                               # off in v0.1; v0.3 enables
 # deep_review     = false                               # if true, run /ultrareview after /review
 # depends_on      = []                                  # list of task ids to complete first
-#
-# Example below is commented out. Uncomment / replace when wiring real tasks.
-#
-# [[task]]
-# id          = "example-001"
-# title       = "Add a Deno comparison to the bun installation guide"
-# prompt      = """
-# Open scripts/install/bun-installation-guide.md and add a section
-# titled '## Deno alternative' with installation, equivalence to npm
-# scripts, and the one known incompatibility (better-sqlite3 needs
-# special handling). Keep under 40 lines.
-# """
-# disposition = "claude-mention"
-# repo        = "subagentapps/managed-subagents"
-# branch      = "main"
-# label       = "orchestrator"
 
-# Queue exhausted 2026-04-28. The wd-1..wd-9 brutalist redesign chain
-# shipped end-to-end; managedsubagents.com serves the live result.
-# Add new [[task]] entries below when there's more work to dispatch.
+# ─── 2026-04-28 batch — independent improvements (no Playwright, no wrangler) ───
+
+[[task]]
+id = "fix-tasks-remove-bug"
+title = "Fix tasks-remove.ts boundary-detection bug"
+prompt = """
+Open subagent-orchestrator/src/tasks-remove.ts. There is a known bug in how it locates the end of a [[task]] stanza: when two stanzas abut without a blank line between them, removing one also removes the next. Reproduce with a fixture in tests/cli/tasks-remove.test.ts that has two adjacent stanzas (no blank line); call the remove function on the first id and assert the second stanza survives unchanged. The test should fail before the fix. Fix the boundary detection so it stops at either:
+  (a) a blank line followed by the next `[[task]]` line, OR
+  (b) the immediate next `[[task]]` line at column 0,
+whichever comes first. After the fix the regression test must pass and all existing tests/cli tests must still pass. Run `npm run typecheck && npm test` before commit. Open a draft PR titled `fix(orchestrator): tasks-remove no longer eats adjacent stanza`.
+"""
+disposition = "local"
+repo = "subagentapps/managed-subagents"
+label = "orchestrator"
+
+[[task]]
+id = "webapp-og-card"
+title = "Add OpenGraph + Twitter card meta to webapp/index.html"
+prompt = """
+Open webapp/index.html. After the existing <meta name="description"> tag and before the <link rel="icon">, add OpenGraph and Twitter card meta tags so links to https://managedsubagents.com unfurl with a brand-consistent preview on Twitter/X, Slack, iMessage, GitHub, and Discord. Use these values:
+  og:type = website
+  og:url = https://managedsubagents.com
+  og:title = managedsubagents — autonomous PR orchestration
+  og:description = Self-hosted, $0/mo. Local-first orchestrator that fans work out to Claude Code, watches the PRs, and merges what passes.
+  og:site_name = managedsubagents
+  twitter:card = summary_large_image
+  twitter:title (mirror og:title)
+  twitter:description (mirror og:description)
+For og:image and twitter:image use the path /og-image.png (do NOT create the image file in this task — note in the PR body that the image is a follow-up). Keep the markup minimal; no JS, no extra deps. Run `npm run build` to confirm Vite still builds. Open a draft PR titled `feat(webapp): OG + Twitter card meta for link unfurls`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "webapp-robots-sitemap"
+title = "Add robots.txt + sitemap.xml in webapp/public/"
+prompt = """
+Create two new files served as static assets by Workers Static Assets:
+  1. webapp/public/robots.txt — Allow: / for User-agent: * and a Sitemap: https://managedsubagents.com/sitemap.xml line. Block nothing else.
+  2. webapp/public/sitemap.xml — minimal valid XML sitemap with one <url> entry: loc=https://managedsubagents.com/, lastmod=2026-04-28, changefreq=monthly, priority=1.0.
+Vite copies anything in webapp/public/ into dist/ at build time, so no additional config is needed. Run `npm run build` and verify both files appear in dist/. Open a draft PR titled `feat(webapp): robots.txt + sitemap.xml for crawlers`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "webapp-jsonld"
+title = "Add SoftwareApplication JSON-LD schema to index.html"
+prompt = """
+Open webapp/index.html. Just before the closing </head> tag, add a <script type=\"application/ld+json\"> block with a SoftwareApplication schema describing managedsubagents:
+  @context: https://schema.org
+  @type: SoftwareApplication
+  name: managedsubagents
+  applicationCategory: DeveloperApplication
+  operatingSystem: macOS, Linux
+  url: https://managedsubagents.com
+  description: Self-hosted local-first orchestrator that fans work out to Claude Code, watches the PRs, and merges what passes.
+  offers: { @type: Offer, price: 0, priceCurrency: USD }
+  author: { @type: Organization, name: managedsubagents, url: https://managedsubagents.com }
+Use compact JSON (no excessive whitespace) so it doesn't bloat the HTML. Run `npm run build` to confirm Vite still builds and the script survives minification. Open a draft PR titled `feat(webapp): SoftwareApplication JSON-LD for SEO`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
+
+[[task]]
+id = "webapp-install-section"
+title = "Add Install section between Stack and SelfRef"
+prompt = """
+The Hero CTA currently links to GitHub but the page never tells you HOW to install. Add an in-page Install section:
+  1. Create webapp/src/sections/Install.tsx — brutalist-terminal style consistent with Hero.tsx (the same .terminal pattern with $-prompt, .cmd, .ok, .dim spans). Include three steps:
+     Step 1: clone the repo with `git clone https://github.com/subagentapps/managed-subagents.git`
+     Step 2: bootstrap `cd managed-subagents/subagent-orchestrator && npm ci && npm run build`
+     Step 3: smoke-test `node dist/index.js doctor`
+     Show expected output for each (one or two lines after each prompt, .dim or .ok colored).
+  2. Create webapp/src/sections/Install.module.css with section-scoped layout consistent with the other sections' modules (mobile-first, max-width 50ch on base, expanding at 600px+).
+  3. Create webapp/src/sections/Install.test.tsx (vitest + @testing-library/react) verifying the section renders, contains the word \"Install\" in a heading, and has at least one element matching the .terminal class.
+  4. Modify webapp/src/App.tsx — import Install and place it between <Stack /> and <SelfRef />.
+  5. Run `npm run typecheck && npm test && npm run build` — all must pass before commit.
+Open a draft PR titled `feat(webapp): Install section with copy-paste setup`.
+"""
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "webapp-improve"
