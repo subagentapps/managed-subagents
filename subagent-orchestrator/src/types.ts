@@ -63,7 +63,7 @@ export interface RawTasksTomlFile {
  */
 export interface TaskResult {
   taskId: string;
-  status: "dispatched" | "reviewing" | "ready-for-merge" | "needs-human" | "failed" | "merged";
+  status: "dispatched" | "reviewing" | "ready-for-merge" | "needs-human" | "failed" | "merged" | "cancelled";
   prUrl?: string;
   prNumber?: number;
   prMergedAt?: string;
