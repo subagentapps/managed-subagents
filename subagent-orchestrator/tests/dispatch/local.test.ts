@@ -56,6 +56,17 @@ describe("resolvePermissionShape", () => {
     expect(r.permissionMode).toBe("acceptEdits");
     expect(r.allowedTools).toEqual(["Read", "Glob", "Grep", "Bash", "Edit", "Write"]);
   });
+
+  it("edit-intent verbs override read-only verbs (regression: dispatch_log rows #20, #21 silently no-op'd at $1.12 + $0.51)", () => {
+    const r = resolvePermissionShape(
+      makeTask({
+        title: "Fix the regex",
+        prompt: "Open src/foo.ts and fix the bug. Then verify with typecheck and run tests.",
+      }),
+    );
+    expect(r.permissionMode).toBe("acceptEdits");
+    expect(r.allowedTools).toContain("Write");
+  });
 });
 
 describe("dispatchLocal", () => {
