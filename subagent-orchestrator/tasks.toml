@@ -34,3 +34,54 @@
 # repo        = "subagentapps/managed-subagents"
 # branch      = "main"
 # label       = "orchestrator"
+
+[[task]]
+id = "cf-research-stack"
+title = "Research Cloudflare deploy stack via llms.txt crawl"
+prompt = "Crawl https://developers.cloudflare.com/llms.txt and the index entries for Workers, Pages, DNS (Custom Domains), Workers Custom Domains, Workers Builds, and Wrangler. Pull the relevant *.md children and produce docs/cloudflare-stack-decision.md (~150 lines) recommending Workers Static Assets vs Pages for a single-page React/Vite landing site bound to managedsubagents.com under account e6294e3ea89f8207af387d459824aaae. Include: 1) chosen runtime + 2-line rationale, 2) required Cloudflare MCP scopes, 3) wrangler.toml skeleton, 4) the exact API/CLI sequence to add a Custom Domain, 5) cost ceiling note. Read-only research, no deploy."
+disposition = "local"
+label = "cloudflare-launch"
+
+[[task]]
+id = "cf-scaffold-localhost"
+title = "Scaffold local webapp skeleton (Vite + React + Workers Static Assets)"
+prompt = "Per docs/cloudflare-stack-decision.md (cf-research-stack output), create webapp/ directory at repo root with: package.json, tsconfig.json, vite.config.ts, wrangler.toml (account_id=e6294e3ea89f8207af387d459824aaae, name=managedsubagents-web), src/main.tsx + src/App.tsx (placeholder hello), index.html. 'npm install && npm run dev' must serve a localhost page. 'npx wrangler dev' must serve the same Worker locally. Add webapp/ to repo CLAUDE.md as a sibling project. Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "cloudflare-launch"
+depends_on = ["cf-research-stack"]
+
+[[task]]
+id = "cf-build-landing"
+title = "Build the managedsubagents.com landing page UI"
+prompt = "Inside webapp/ (created by cf-scaffold-localhost), replace the placeholder App with a real landing page for managedsubagents.com: hero ('Autonomous PR orchestration for Claude Code'), three feature cards (ship/review/merge, telemetry, hard rails), CTA pointing at github.com/subagentapps/managed-subagents, footer. Single-page, no router, plain CSS modules — no Tailwind / no UI library / no fonts beyond system stack. Lighthouse perf > 95 in local dev. Open a draft PR."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "cloudflare-launch"
+depends_on = ["cf-scaffold-localhost"]
+
+[[task]]
+id = "cf-mcp-handshake"
+title = "Verify connected Cloudflare MCP and document scopes"
+prompt = "Probe the connected Cloudflare MCP (mcp__cloudflare__*) tools. List available tool names. Run a read-only call to enumerate zones in account e6294e3ea89f8207af387d459824aaae and confirm 'managedsubagents.com' appears (or note its status). Produce docs/cloudflare-mcp-handshake.md with: tool inventory, exact zone-list payload, the OAuth scopes the MCP currently has, and gap analysis (any scope needed for Workers deploy + Custom Domain bind that we don't yet have). No writes."
+disposition = "local"
+label = "cloudflare-launch"
+depends_on = ["cf-research-stack"]
+
+[[task]]
+id = "cf-deploy-worker"
+title = "Deploy webapp Worker to Cloudflare under account e6294e3ea89f8207af387d459824aaae"
+prompt = "After cf-build-landing is merged, run 'wrangler deploy' from webapp/ targeting account_id=e6294e3ea89f8207af387d459824aaae. Worker name=managedsubagents-web. Verify the workers.dev preview URL (https://managedsubagents-web.<sub>.workers.dev) returns 200 and serves the landing page. Capture deployment id, version id, and preview URL into docs/cloudflare-deploy-record.md. STOP before binding the production domain — that's cf-bind-domain. Open a PR with the deploy record committed."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "cloudflare-launch"
+depends_on = ["cf-build-landing", "cf-mcp-handshake"]
+
+[[task]]
+id = "cf-bind-domain"
+title = "Bind managedsubagents.com Custom Domain to Worker via Cloudflare MCP"
+prompt = "Using the connected Cloudflare MCP (per cf-mcp-handshake), bind managedsubagents.com (zone in account e6294e3ea89f8207af387d459824aaae, dashboard URL https://dash.cloudflare.com/e6294e3ea89f8207af387d459824aaae/managedsubagents.com) as a Custom Domain on the managedsubagents-web Worker. Verify: 1) DNS A/AAAA/CNAME points at Cloudflare's edge, 2) HTTPS cert provisioned (poll until ready or fail after 5min), 3) curl -sI https://managedsubagents.com returns 200 with the landing page bytes. Update docs/cloudflare-deploy-record.md with the bound-domain confirmation. Open a PR. DO NOT proceed if the MCP scope check from cf-mcp-handshake flagged a missing scope — fail loudly instead."
+disposition = "web"
+repo = "subagentapps/managed-subagents"
+label = "cloudflare-launch"
+depends_on = ["cf-deploy-worker"]
